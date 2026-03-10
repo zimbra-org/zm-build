@@ -4,7 +4,7 @@
 
 ```bash
 # Install build tools
-apt-get install -y openjdk-8-jdk ant ant-optional maven ruby debhelper
+apt-get install -y openjdk-8-jdk ant ant-optional maven ruby debhelper rpm build-essential git
 
 # Set Java 8 as default (Zimbra requires JDK 8, NOT 17)
 update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java

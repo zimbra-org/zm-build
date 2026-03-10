@@ -28,7 +28,7 @@ cd "$SCRIPT_DIR"
 install_prereqs() {
     echo "=== Installing build prerequisites ==="
     apt-get update -qq
-    apt-get install -y openjdk-8-jdk ant ant-optional maven ruby debhelper rpm
+    apt-get install -y openjdk-8-jdk ant ant-optional maven ruby debhelper rpm build-essential git
     update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
     update-alternatives --set javac /usr/lib/jvm/java-8-openjdk-amd64/bin/javac
     echo "=== Prerequisites installed ==="

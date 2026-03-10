@@ -3136,9 +3136,6 @@ sub setHostName {
   if ($sdomain eq $old) {
     $config{SMTPDEST} = $suser.'@'.$config{CREATEDOMAIN};
   }
-  if ($config{SPELLURL} eq "http://${old}:7780/aspell.php") {
-    $config{SPELLURL} = "http://$config{HOSTNAME}:7780/aspell.php";
-  }
 }
 
 sub setSmtpHost {
@@ -3349,11 +3346,6 @@ sub setHttpsProxyPort {
       $config{HTTPSPORT}="UNSET";
     }
   }
-}
-
-sub setSpellUrl {
-  $config{SPELLURL} = askNonBlank("Please enter the spell server URL:",
-    $config{SPELLURL});
 }
 
 sub setLicenseFile {
@@ -4404,21 +4396,6 @@ sub createStoreMenu {
        };
        $i++;
     }
-    $$lm{menuitems}{$i} = {
-      "prompt" => "Use spell check server:",
-      "var" => \$config{USESPELL},
-      "callback" => \&toggleYN,
-      "arg" => "USESPELL",
-      };
-    $i++;
-    if ($config{USESPELL} eq "yes") {
-      $$lm{menuitems}{$i} = {
-        "prompt" => "Spell server URL:",
-        "var" => \$config{SPELLURL},
-        "callback" => \&setSpellUrl,
-        };
-      $i++;
-    }
     if (!isInstalled("zimbra-proxy") && $newinstall) {
       $$lm{menuitems}{$i} = {
         "prompt" => "Configure for use with mail proxy:",
@@ -4681,11 +4658,10 @@ sub createMainMenu {
   $i++;
   foreach my $package (@packageList) {
     if ($package eq "zimbra-core") {next;}
-    if ($package eq "zimbra-apache") {next;}
     if ($package eq "zimbra-archiving") {next;}
     if ($package eq "zimbra-memcached") {next;}
     if (defined($installedPackages{$package})) {
-      if ($package =~ /logger|spell|convertd|license-daemon/) {
+      if ($package =~ /logger|convertd|license-daemon/) {
         $mm{menuitems}{$i} = {
           "prompt" => "$package:",
           "var" => \$enabledPackages{$package},
@@ -6010,17 +5986,6 @@ sub configCreateServerEntry {
 }
 
 sub configSpellServer {
-  if ($configStatus{configSpellServer} eq "CONFIGURED") {
-    configLog("configSpellServer");
-    return 0;
-  }
-
-  if ($config{USESPELL} eq "yes") {
-    progress ( "Setting spell check URL..." );
-    my $rc = setLdapServerConfig("zimbraSpellCheckURL", $config{SPELLURL});
-    progress(($rc == 0) ? "done.\n" : "failed.\n");
-  }
-
   configLog("configSpellServer");
 }
 
@@ -7144,7 +7109,6 @@ sub configSetEnabledServices {
       }
       next;
     }
-    if ($p eq "zimbra-apache") {next;}
     if ($p eq "zimbra-archiving") {next;}
     $p =~ s/zimbra-//;
     if ($p eq "store") {$p = "mailbox";}
@@ -7163,7 +7127,6 @@ sub configSetEnabledServices {
       push(@enabledServiceList, ('zimbraServiceEnabled', 'stats'));
       next;
     }
-    if ($p eq "zimbra-apache") {next;}
     if ($p eq "zimbra-archiving") {next;}
     if ($enabledPackages{$p} eq "Enabled") {
       $p =~ s/zimbra-//;

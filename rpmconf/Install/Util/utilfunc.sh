@@ -2382,7 +2382,6 @@ getInstallPackages() {
     echo "Select the packages to install"
   fi
 
-  APACHE_SELECTED="no"
   LOGGER_SELECTED="no"
   STORE_SELECTED="no"
   MTA_SELECTED="no"
@@ -2569,11 +2568,6 @@ getInstallPackages() {
           exit 1
         fi
       fi
-      if [ $i = "zimbra-convertd" -a $APACHE_SELECTED = "no" ]; then
-        APACHE_SELECTED="yes"
-        INSTALL_PACKAGES="$INSTALL_PACKAGES zimbra-apache"
-      fi
-
       INSTALL_PACKAGES="$INSTALL_PACKAGES $i"
     fi
 
