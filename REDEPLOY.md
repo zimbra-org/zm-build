@@ -91,6 +91,9 @@ su - zimbra -c 'zmproxyctl restart'
 
 # Verify port 443 is listening
 ss -tlnp | grep ':443 '
+
+# Exclude snap loopback mounts from disk monitoring (they always show 100%, false alarm)
+su - zimbra -c "zmlocalconfig -e zmdisklog_exclude_pattern='/snap'"
 ```
 
 ### Step 5: SSL Certificate (if expired)

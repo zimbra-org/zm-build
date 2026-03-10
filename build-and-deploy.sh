@@ -83,6 +83,10 @@ deploy() {
         su - zimbra -c "zmproxyctl restart"
     }
 
+    # Exclude snap loopback mounts from disk monitoring (they always show 100%)
+    echo "Fixing disk monitor to ignore snap mounts..."
+    su - zimbra -c "zmlocalconfig -e zmdisklog_exclude_pattern='/snap'"
+
     rm -rf "$TMPDIR"
     echo ""
     echo "=== Deploy complete ==="
