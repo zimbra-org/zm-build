@@ -133,6 +133,7 @@ post_deploy() {
     # 2. Exclude snap mounts from disk monitoring
     echo "Setting disk monitor to ignore snap mounts..."
     su - zimbra -c "zmlocalconfig -e zmdisklog_exclude_pattern='/snap'"
+    su - zimbra -c "zmstatctl restart"
 
     # 3. Regenerate proxy config (in case templates changed)
     echo "Regenerating proxy config..."
