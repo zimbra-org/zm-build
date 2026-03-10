@@ -2425,9 +2425,7 @@ getInstallPackages() {
           fi
         fi
         INSTALL_PACKAGES="$INSTALL_PACKAGES $i"
-        if [ $i = "zimbra-apache" ]; then
-          APACHE_SELECTED="yes"
-        elif [ $i = "zimbra-logger" ]; then
+        if [ $i = "zimbra-logger" ]; then
           LOGGER_SELECTED="yes"
         elif [ $i = "zimbra-license-daemon" ]; then
           LICENSE_DAEMON_SELECTED="yes"
@@ -2540,8 +2538,6 @@ getInstallPackages() {
       elif [ $i = "zimbra-store" ]; then
         STORE_SELECTED="yes"
         checkLicenseDaemonServiceRunning $LICENSE_DAEMON_SELECTED
-      elif [ $i = "zimbra-apache" ]; then
-        APACHE_SELECTED="yes"
       elif [ $i = "zimbra-mta" ]; then
         MTA_SELECTED="yes"
       elif [ $i = "zimbra-proxy" ]; then
@@ -2573,11 +2569,6 @@ getInstallPackages() {
           exit 1
         fi
       fi
-      if [ $i = "zimbra-spell" -a $APACHE_SELECTED = "no" ]; then
-        APACHE_SELECTED="yes"
-        INSTALL_PACKAGES="$INSTALL_PACKAGES zimbra-apache"
-      fi
-
       if [ $i = "zimbra-convertd" -a $APACHE_SELECTED = "no" ]; then
         APACHE_SELECTED="yes"
         INSTALL_PACKAGES="$INSTALL_PACKAGES zimbra-apache"

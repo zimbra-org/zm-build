@@ -32,8 +32,6 @@ zimbra-dnscache \
 zimbra-snmp \
 zimbra-license-daemon \
 zimbra-store \
-zimbra-apache \
-zimbra-spell \
 zimbra-convertd \
 zimbra-memcached \
 zimbra-proxy \

@@ -81,75 +81,11 @@
       },
    },
    {
-      "dir"         => "zm-clam-scanner-store",
-      "ant_targets" => ["publish-local", "test"],
-      "stage_cmd"   => sub {
-         SysExec("mkdir -p $CFG{BUILD_DIR}/zm-clam-scanner-store/build/dist");
-         SysExec("cp -f -rp build/zm-clam-scanner-store-*.jar $CFG{BUILD_DIR}/zm-clam-scanner-store/build/dist");
-      },
-   },
-   {
       "dir"         => "zm-licenses",
       "ant_targets" => undef,
       "stage_cmd"   => sub {
          SysExec("mkdir -p $CFG{BUILD_DIR}/zm-licenses");
          SysExec("(cd .. && rsync -az --relative zm-licenses/ $CFG{BUILD_DIR}/)");
-      },
-   },
-   {
-      "dir"         => "zm-nginx-lookup-store",
-      "ant_targets" => ["publish-local", "test"],
-      "stage_cmd"   => sub {
-         SysExec("mkdir -p $CFG{BUILD_DIR}/zm-nginx-lookup-store/build/dist");
-         SysExec("cp -f -rp build/zm-nginx-lookup-store-*.jar $CFG{BUILD_DIR}/zm-nginx-lookup-store/build/dist");
-      },
-   },
-   {
-      "dir"         => "zm-versioncheck-admin-zimlet",
-      "ant_targets" => ["package-zimlet"],
-      "stage_cmd"   => sub {
-         SysExec("mkdir -p $CFG{BUILD_DIR}/zm-versioncheck-admin-zimlet/build/zimlet");
-         SysExec("cp -f build/zimlet/*.zip $CFG{BUILD_DIR}/zm-versioncheck-admin-zimlet/build/zimlet");
-      },
-   },
-   {
-      "dir"         => "zm-bulkprovision-admin-zimlet",
-      "ant_targets" => ["package-zimlet"],
-      "stage_cmd"   => sub {
-         SysExec("mkdir -p $CFG{BUILD_DIR}/zm-bulkprovision-admin-zimlet/build/zimlet");
-         SysExec("cp -f build/zimlet/*.zip $CFG{BUILD_DIR}/zm-bulkprovision-admin-zimlet/build/zimlet");
-      },
-   },
-   {
-      "dir"         => "zm-certificate-manager-admin-zimlet",
-      "ant_targets" => ["package-zimlet"],
-      "stage_cmd"   => sub {
-         SysExec("mkdir -p $CFG{BUILD_DIR}/zm-certificate-manager-admin-zimlet/build/zimlet");
-         SysExec("cp -f build/zimlet/*.zip $CFG{BUILD_DIR}/zm-certificate-manager-admin-zimlet/build/zimlet");
-      },
-   },
-   {
-      "dir"         => "zm-proxy-config-admin-zimlet",
-      "ant_targets" => ["package-zimlet"],
-      "stage_cmd"   => sub {
-         SysExec("mkdir -p $CFG{BUILD_DIR}/zm-proxy-config-admin-zimlet/build/zimlet");
-         SysExec("cp -f build/zimlet/*.zip $CFG{BUILD_DIR}/zm-proxy-config-admin-zimlet/build/zimlet");
-      },
-   },
-   {
-      "dir"         => "zm-helptooltip-zimlet",
-      "ant_targets" => ["package-zimlet"],
-      "stage_cmd"   => sub {
-         SysExec("mkdir -p $CFG{BUILD_DIR}/zm-helptooltip-zimlet/build/zimlet");
-         SysExec("cp -f build/zimlet/*.zip $CFG{BUILD_DIR}/zm-helptooltip-zimlet/build/zimlet");
-      },
-   },
-   {
-      "dir"         => "zm-viewmail-admin-zimlet",
-      "ant_targets" => ["package-zimlet"],
-      "stage_cmd"   => sub {
-         SysExec("mkdir -p $CFG{BUILD_DIR}/zm-viewmail-admin-zimlet/build/zimlet");
-         SysExec("cp -f build/zimlet/*.zip $CFG{BUILD_DIR}/zm-viewmail-admin-zimlet/build/zimlet");
       },
    },
    {
@@ -178,27 +114,6 @@
       },
    },
    {
-      "dir"         => "zm-versioncheck-utilities",
-      "ant_targets" => undef,
-      "stage_cmd"   => sub {
-         SysExec("(cd .. && rsync -az --relative zm-versioncheck-utilities/src/libexec/zmcheckversion $CFG{BUILD_DIR}/)");
-      },
-   },
-   {
-      "dir"         => "zm-webclient-portal-example",
-      "ant_targets" => undef,
-      "stage_cmd"   => sub {
-         SysExec("cp -f -r ../zm-webclient-portal-example $CFG{BUILD_DIR}");
-      },
-   },
-   {
-      "dir"         => "zm-downloads",
-      "ant_targets" => undef,
-      "stage_cmd"   => sub {
-         SysExec("(cd .. && rsync -az --relative --exclude '.git' zm-downloads $CFG{BUILD_DIR}/)");
-      },
-   },
-   {
       "dir"         => "zm-db-conf",
       "ant_targets" => undef,
       "stage_cmd"   => sub {
@@ -210,13 +125,6 @@
       "dir"         => "zm-admin-console",
       "ant_targets" => ["pkg"],
       "deploy_pkg_into" => "bundle",
-   },
-   {
-      "dir"         => "zm-aspell",
-      "ant_targets" => undef,
-      "stage_cmd"   => sub {
-         SysExec("cp -f -r ../zm-aspell $CFG{BUILD_DIR}");
-      },
    },
    {
       "dir"         => "zm-dnscache",
@@ -258,30 +166,6 @@
       "ant_targets" => undef,
       "stage_cmd"   => sub {
          SysExec("cp -f -r ../zm-migration-tools $CFG{BUILD_DIR}");
-      },
-   },
-   {
-      "dir"         => "zm-bulkprovision-store",
-      "ant_targets" => ["jar"],
-      "stage_cmd"   => sub {
-         SysExec("mkdir -p $CFG{BUILD_DIR}/zm-bulkprovision-store");
-         SysExec("cp -f -r ../zm-bulkprovision-store/build $CFG{BUILD_DIR}/zm-bulkprovision-store");
-      },
-   },
-   {
-      "dir"         => "zm-certificate-manager-store",
-      "ant_targets" => ["jar"],
-      "stage_cmd"   => sub {
-         SysExec("mkdir -p $CFG{BUILD_DIR}/zm-certificate-manager-store");
-         SysExec("cp -f -r ../zm-certificate-manager-store/build $CFG{BUILD_DIR}/zm-certificate-manager-store");
-      },
-   },
-   {
-      "dir"         => "zm-versioncheck-store",
-      "ant_targets" => ["jar"],
-      "stage_cmd"   => sub {
-         SysExec("mkdir -p $CFG{BUILD_DIR}/zm-versioncheck-store");
-         SysExec("cp -f -r ../zm-versioncheck-store/build $CFG{BUILD_DIR}/zm-versioncheck-store");
       },
    },
    {
@@ -364,24 +248,6 @@
       "ant_targets" => undef,
       "stage_cmd"   => sub {
          SysExec("cp -f -r ../zm-jetty-conf $CFG{BUILD_DIR}");
-      },
-   },
-   
-   {
-      "dir"         => "zm-oauth-social",
-      "ant_targets" => ["publish-local", "oauth-social-common-jar", "oauth-social-jar", "test"],
-      "stage_cmd"   => sub {
-         SysExec("mkdir -p $CFG{BUILD_DIR}/zm-oauth-social/build/dist");
-         SysExec("cp -f -rp build/zm-oauth-social*.jar $CFG{BUILD_DIR}/zm-oauth-social/build/dist");
-      },
-   },
-   
-   {
-      "dir"         => "zm-gql",
-      "ant_targets" => ["publish-local", "test"],
-      "stage_cmd"   => sub {
-         SysExec("mkdir -p $CFG{BUILD_DIR}/zm-gql/build/dist");
-         SysExec("cp -f -rp build/zm-gql-*.jar $CFG{BUILD_DIR}/zm-gql/build/dist");
       },
    },
 );

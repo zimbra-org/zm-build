@@ -83,8 +83,6 @@ my @packageList = (
   "zimbra-dnscache",
   "zimbra-snmp",
   "zimbra-store",
-  "zimbra-apache",
-  "zimbra-spell",
   "zimbra-convertd",
   "zimbra-memcached",
   "zimbra-proxy",
@@ -107,7 +105,6 @@ my %packageServiceMap = (
   mailbox   => "zimbra-store",
   snmp      => "zimbra-snmp",
   ldap      => "zimbra-ldap",
-  spell     => "zimbra-spell",
   stats     => "zimbra-core",
   'vmware-ha' => "zimbra-core",
   memcached => "zimbra-memcached",
@@ -423,7 +420,6 @@ sub checkPortConflicts {
     7047 => 'zimbra-convertd',
     7306 => 'zimbra-store',
     7307 => 'zimbra-store',
-    7780 => 'zimbra-spell',
     8143 => 'zimbra-imapd',
     8993 => 'zimbra-imapd',
     8465 => 'zimbra-mta',
@@ -1589,9 +1585,9 @@ sub setDefaults {
       $config{zimbraFeatureTasksEnabled} = "Disabled"
         if ($config{zimbraFeatureTasksEnabled} eq "");
     } else {
-      $config{zimbraFeatureBriefcasesEnabled} = "Enabled"
+      $config{zimbraFeatureBriefcasesEnabled} = "Disabled"
         if ($config{zimbraFeatureBriefcasesEnabled} eq "");
-      $config{zimbraFeatureTasksEnabled} = "Enabled"
+      $config{zimbraFeatureTasksEnabled} = "Disabled"
         if ($config{zimbraFeatureTasksEnabled} eq "");
     }
 
@@ -3495,10 +3491,6 @@ sub setEnabledDependencies {
     }
   }
 
-  if (isEnabled("zimbra-spell")) {
-    $config{USESPELL} = "yes";
-    $config{SPELLURL} = "http://$config{HOSTNAME}:7780/aspell.php";
-  }
   if (isInstalled("zimbra-proxy")) {
      setUseProxy();
   }
@@ -6252,6 +6244,18 @@ sub configSetCEFeatures {
     }
     progress ( "Setting $key=$val...");
     my $rc = setLdapCOSConfig($key, $val);
+    progress (($rc == 0) ? "done.\n" : "failed.\n");
+    configLog($key);
+  }
+
+  # Disable non-core features for lightweight webmail+admin build
+  foreach my $key (qw(zimbraFeatureCalendarEnabled zimbraFeatureGroupCalendarEnabled zimbraFeatureNotebookEnabled)) {
+    if ($configStatus{$key} eq "CONFIGURED") {
+      configLog($key);
+      next;
+    }
+    progress ( "Setting $key=FALSE...");
+    my $rc = setLdapCOSConfig($key, "FALSE");
     progress (($rc == 0) ? "done.\n" : "failed.\n");
     configLog($key);
   }
