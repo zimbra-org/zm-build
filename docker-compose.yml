@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   zimbra:
-    build: .
+    image: william1988/cxs-zimbra:1.0.0
     container_name: cxs-zimbra
     hostname: mail.cloudxspace.com
     environment:
@@ -20,19 +20,31 @@ services:
       - "995:995"     # POP3S
       - "7071:7071"   # Admin console
     volumes:
-      - zimbra-data:/opt/zimbra
-    # Zimbra needs more resources
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-    # Zimbra needs these kernel capabilities
+      # === Database / LDAP ===
+      - ./data/ldap:/opt/zimbra/data/ldap               # OpenLDAP database
+      - ./data/db:/opt/zimbra/db                         # MySQL/MariaDB data
+      - ./data/logger-db:/opt/zimbra/logger/db           # Logger database
+
+      # === Mail storage ===
+      - ./data/store:/opt/zimbra/store                   # Mailbox message store
+      - ./data/index:/opt/zimbra/index                   # Search indexes
+      - ./data/redolog:/opt/zimbra/redolog               # Transaction redo logs
+      - ./data/backup:/opt/zimbra/backup                 # Backups
+
+      # === Configuration ===
+      - ./data/conf:/opt/zimbra/conf                     # Zimbra config (localconfig.xml, certs, etc.)
+      - ./data/ssl:/opt/zimbra/ssl                       # SSL certificates
+
+      # === Logs ===
+      - ./data/log:/opt/zimbra/log                       # Zimbra logs
+      - ./data/mailboxd-logs:/opt/zimbra/mailboxd/logs   # Jetty/mailbox logs
+
+      # === MTA data ===
+      - ./data/amavisd:/opt/zimbra/data/amavisd          # Anti-virus/spam
+      - ./data/clamav:/opt/zimbra/data/clamav             # ClamAV definitions
+      - ./data/postfix:/opt/zimbra/data/postfix           # Postfix mail queue
+      - ./data/opendkim:/opt/zimbra/data/opendkim         # DKIM signing keys
     cap_add:
       - SYS_PTRACE
       - NET_ADMIN
-    # Required for syslog, cron, etc.
-    privileged: false
     restart: unless-stopped
-
-volumes:
-  zimbra-data:

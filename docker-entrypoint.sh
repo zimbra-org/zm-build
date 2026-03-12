@@ -8,6 +8,37 @@ DNS_RESOLVER="${DNS_RESOLVER:-8.8.8.8}"
 
 ZIMBRA_INSTALLED_MARKER="/opt/zimbra/.docker_installed"
 
+# Ensure bind-mounted directories exist with correct ownership
+prepare_data_dirs() {
+    local DIRS=(
+        /opt/zimbra/data/ldap
+        /opt/zimbra/db
+        /opt/zimbra/logger/db
+        /opt/zimbra/store
+        /opt/zimbra/index
+        /opt/zimbra/redolog
+        /opt/zimbra/backup
+        /opt/zimbra/conf
+        /opt/zimbra/ssl
+        /opt/zimbra/log
+        /opt/zimbra/mailboxd/logs
+        /opt/zimbra/data/amavisd
+        /opt/zimbra/data/clamav
+        /opt/zimbra/data/postfix
+        /opt/zimbra/data/opendkim
+    )
+    for d in "${DIRS[@]}"; do
+        mkdir -p "$d"
+    done
+
+    # Fix ownership if zimbra user exists (after install)
+    if id zimbra &>/dev/null; then
+        for d in "${DIRS[@]}"; do
+            chown -R zimbra:zimbra "$d" 2>/dev/null || true
+        done
+    fi
+}
+
 install_zimbra() {
     echo "============================================"
     echo "  Installing Zimbra (first run)"
@@ -37,9 +68,15 @@ install_zimbra() {
         -e "s/__DNS_RESOLVER__/$DNS_RESOLVER/g" \
         /tmp/docker-install.conf > /tmp/install.conf
 
+    # Prepare data directories before install
+    prepare_data_dirs
+
     # Run Zimbra installer
     cd /tmp/zcs-installer
     ./install.sh --platform-override --skip-upgrade-check < /tmp/install.conf
+
+    # Fix ownership on bind-mounted dirs after install
+    prepare_data_dirs
 
     # Post-install tweaks
     su - zimbra -c "zmprov ms $HOSTNAME zimbraMailSSLProxyPort 443 zimbraMailProxyPort 80" || true
@@ -87,6 +124,9 @@ stop_zimbra() {
 
 case "${1:-start}" in
     start)
+        # Prepare data dirs (fix ownership on restart)
+        prepare_data_dirs
+
         # Install on first run
         if [ ! -f "$ZIMBRA_INSTALLED_MARKER" ]; then
             install_zimbra
