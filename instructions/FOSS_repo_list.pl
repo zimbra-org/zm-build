@@ -11,6 +11,7 @@
    { name => "zm-ajax",                              },
    { name => "zm-admin-ajax",                        },
    { name => "zm-amavis",                            },
+   { name => "zm-certificate-manager-store",         },
    { name => "zm-charset",                           },
    { name => "zm-core-utils",                        },
    { name => "zm-db-conf",                           },

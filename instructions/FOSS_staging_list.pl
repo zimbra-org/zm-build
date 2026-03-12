@@ -244,6 +244,14 @@
       },
    },
    {
+      "dir"         => "zm-certificate-manager-store",
+      "ant_targets" => ["jar"],
+      "stage_cmd"   => sub {
+         SysExec("mkdir -p $CFG{BUILD_DIR}/zm-certificate-manager-store");
+         SysExec("cp -f -r ../zm-certificate-manager-store/build $CFG{BUILD_DIR}/zm-certificate-manager-store");
+      },
+   },
+   {
       "dir"         => "zm-jetty-conf",
       "ant_targets" => undef,
       "stage_cmd"   => sub {

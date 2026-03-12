@@ -27,7 +27,18 @@ RUN apt-get update -qq && \
         netcat-openbsd sudo wget curl rsyslog \
         net-tools iproute2 iputils-ping dnsutils \
         libperl5.30 libaio1 libgmp10 libstdc++6 \
-        coreutils procps psmisc && \
+        coreutils procps psmisc \
+        gnupg apt-transport-https ca-certificates && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Pre-configure resolvconf to avoid /etc/resolv.conf symlink issue in Docker
+# The Zimbra zimbra-os-requirements package pulls in resolvconf, which tries
+# to symlink /etc/resolv.conf — but Docker bind-mounts that file.
+RUN mkdir -p /run/resolvconf && \
+    echo "nameserver 8.8.8.8" > /run/resolvconf/resolv.conf && \
+    echo "resolvconf resolvconf/linkify-resolvconf boolean false" | debconf-set-selections && \
+    apt-get update -qq && \
+    apt-get install -y resolvconf || true && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copy pre-built installer

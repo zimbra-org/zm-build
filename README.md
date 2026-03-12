@@ -52,28 +52,23 @@ docker compose up -d
 
 ### Data Persistence
 
-All data is stored on the host under `./data/` via bind mounts (not Docker volumes). This makes backup, migration, and inspection easy.
+All Zimbra data is stored on the host under `./data/zimbra/` via a bind mount. This keeps everything out of Docker and makes backup/migration easy.
 
-```
-./data/
-├── ldap/            # OpenLDAP database
-├── db/              # MySQL/MariaDB data
-├── logger-db/       # Logger database
-├── store/           # Mailbox message store
-├── index/           # Search indexes
-├── redolog/         # Transaction redo logs
-├── backup/          # Backups
-├── conf/            # Zimbra config (localconfig.xml, certs, keys)
-├── ssl/             # SSL certificates
-├── log/             # Zimbra logs
-├── mailboxd-logs/   # Jetty/mailbox logs
-├── amavisd/         # Anti-virus/spam data
-├── clamav/          # ClamAV virus definitions
-├── postfix/         # Postfix mail queue
-└── opendkim/        # DKIM signing keys
+```bash
+# In docker-compose.yml:
+volumes:
+  - ./data/zimbra:/opt/zimbra
 ```
 
-Directories are created automatically on first start. To reset, stop the container and `rm -rf ./data/`.
+Key directories inside `./data/zimbra/`:
+- `store/` — Mailbox message store
+- `data/ldap/` — OpenLDAP database
+- `db/` — MySQL/MariaDB data
+- `conf/` — Config, certs, keys (localconfig.xml, slapd.crt, etc.)
+- `log/` — Zimbra logs
+- `index/`, `redolog/`, `backup/` — Search indexes, redo logs, backups
+
+To reset: stop the container and `rm -rf ./data/`.
 
 ### Container Commands
 
