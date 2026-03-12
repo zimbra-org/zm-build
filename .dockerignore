@@ -1,0 +1,24 @@
+# Don't send sibling repos into Docker context (they get cloned fresh)
+../ant-*
+../ical4j-*
+../junixsocket
+../nekohtml-*
+../java-html-sanitizer-*
+../antisamy
+../zm-*
+!.
+
+# Build artifacts
+BUILDS/
+.build.number
+.build.last_no_ts
+.built.*
+
+# Git
+.git
+.circleci
+
+# IDE
+.idea
+*.swp
+*.swo

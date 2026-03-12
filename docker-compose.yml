@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+  zimbra:
+    build: .
+    container_name: cxs-zimbra
+    hostname: mail.cloudxspace.com
+    environment:
+      - DOMAIN=cloudxspace.com
+      - ZIMBRA_HOSTNAME=mail.cloudxspace.com
+      - ADMIN_PASS=changeme
+      - DNS_RESOLVER=8.8.8.8
+    ports:
+      - "25:25"       # SMTP
+      - "80:80"       # HTTP
+      - "443:443"     # HTTPS
+      - "465:465"     # SMTPS
+      - "587:587"     # Submission
+      - "993:993"     # IMAPS
+      - "995:995"     # POP3S
+      - "7071:7071"   # Admin console
+    volumes:
+      - zimbra-data:/opt/zimbra
+    # Zimbra needs more resources
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    # Zimbra needs these kernel capabilities
+    cap_add:
+      - SYS_PTRACE
+      - NET_ADMIN
+    # Required for syslog, cron, etc.
+    privileged: false
+    restart: unless-stopped
+
+volumes:
+  zimbra-data:
