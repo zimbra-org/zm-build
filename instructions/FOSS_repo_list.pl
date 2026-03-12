@@ -27,6 +27,7 @@
    { name => "zm-migration-tools",                  remote => "gh-zm-upstream", },
    { name => "zm-mta",                               },
    { name => "zm-nginx-conf",                       remote => "gh-zm-upstream", },
+   { name => "zm-nginx-lookup-store",              remote => "gh-zm-upstream", },
    { name => "zm-openid-consumer-store",            remote => "gh-zm-upstream", },
    { name => "zm-pkg-tool",                         remote => "gh-zm-upstream", },
    { name => "zm-postfix",                           },

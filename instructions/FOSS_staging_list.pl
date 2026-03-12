@@ -244,6 +244,14 @@
       },
    },
    {
+      "dir"         => "zm-nginx-lookup-store",
+      "ant_targets" => ["publish-local", "test"],
+      "stage_cmd"   => sub {
+         SysExec("mkdir -p $CFG{BUILD_DIR}/zm-nginx-lookup-store/build/dist");
+         SysExec("cp -f -rp build/zm-nginx-lookup-store-*.jar $CFG{BUILD_DIR}/zm-nginx-lookup-store/build/dist");
+      },
+   },
+   {
       "dir"         => "zm-certificate-manager-store",
       "ant_targets" => ["jar"],
       "stage_cmd"   => sub {
