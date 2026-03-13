@@ -63,15 +63,58 @@ install_zimbra() {
     echo "============================================"
 }
 
+verify_extensions() {
+    # The nginx-lookup extension is critical for proxy routing.
+    # With bind-mounted /opt/zimbra, dpkg installs may not persist it.
+    local EXT_DIR="/opt/zimbra/lib/ext/nginx-lookup"
+    if [ ! -f "$EXT_DIR/nginx-lookup.jar" ]; then
+        echo "Restoring missing nginx-lookup extension..."
+        mkdir -p "$EXT_DIR"
+        # Extract from the installed zimbra-store deb in the installer
+        if [ -d /tmp/zcs-installer/packages ]; then
+            local DEB=$(ls /tmp/zcs-installer/packages/zimbra-store_*.deb 2>/dev/null | head -1)
+            if [ -n "$DEB" ]; then
+                dpkg-deb -x "$DEB" /tmp/store-extract
+                cp /tmp/store-extract/opt/zimbra/lib/ext/nginx-lookup/nginx-lookup.jar "$EXT_DIR/"
+                rm -rf /tmp/store-extract
+                echo "nginx-lookup.jar restored"
+            fi
+        fi
+    fi
+}
+
+install_crontab() {
+    # Zimbra needs cron for zmstatuslog (service status monitoring),
+    # log pruning, and other periodic tasks
+    local CRON_DIR="/opt/zimbra/conf/crontabs"
+    if [ -d "$CRON_DIR" ]; then
+        cat "$CRON_DIR/crontab" \
+            "$CRON_DIR/crontab.store" \
+            "$CRON_DIR/crontab.ldap" \
+            "$CRON_DIR/crontab.logger" \
+            "$CRON_DIR/crontab.mta" \
+            2>/dev/null | crontab -u zimbra - 2>/dev/null
+        echo "Zimbra crontab installed"
+    fi
+}
+
 start_zimbra() {
     echo "Starting Zimbra services..."
 
-    # Start rsyslog (needed by Zimbra)
+    # Start rsyslog (needed by Zimbra logger)
     rsyslogd 2>/dev/null || true
 
+    # Start cron (needed for zmstatuslog, log pruning, etc.)
+    cron 2>/dev/null || true
+
     setup_hosts
+    verify_extensions
+    install_crontab
 
     su - zimbra -c "zmcontrol start"
+
+    # Run zmstatuslog once so admin console shows status immediately
+    su - zimbra -c "/opt/zimbra/libexec/zmstatuslog" 2>/dev/null || true
 
     echo ""
     echo "============================================"

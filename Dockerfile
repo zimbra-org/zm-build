@@ -28,7 +28,8 @@ RUN apt-get update -qq && \
         net-tools iproute2 iputils-ping dnsutils \
         libperl5.30 libaio1 libgmp10 libstdc++6 \
         coreutils procps psmisc \
-        gnupg apt-transport-https ca-certificates && \
+        gnupg apt-transport-https ca-certificates \
+        cron && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Pre-configure resolvconf to avoid /etc/resolv.conf symlink issue in Docker
