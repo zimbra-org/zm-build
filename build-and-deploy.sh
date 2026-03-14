@@ -31,12 +31,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORKSPACE_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$SCRIPT_DIR"
 
+BRANDING_FILES=()
+
 customize_branding() {
     echo "=== Applying branding: ${BRAND_NAME} / ${BRAND_DOMAIN} ==="
     local WC="$WORKSPACE_DIR/zm-web-client"
     local AC="$WORKSPACE_DIR/zm-admin-console"
 
-    local files=(
+    BRANDING_FILES=(
         "$WC/WebRoot/messages/ZmMsg.properties"
         "$WC/WebRoot/public/login.jsp"
         "$WC/WebRoot/skins/cxs/skin.properties"
@@ -47,7 +49,7 @@ customize_branding() {
         "$AC/WebRoot/admin_skins/cxs/skin.properties"
     )
 
-    for f in "${files[@]}"; do
+    for f in "${BRANDING_FILES[@]}"; do
         if [ -f "$f" ]; then
             sed -i \
                 -e "s|@@BRAND_NAME@@|${BRAND_NAME}|g" \
@@ -56,7 +58,19 @@ customize_branding() {
                 "$f"
         fi
     done
-    echo "Branding applied to ${#files[@]} files"
+    echo "Branding applied to ${#BRANDING_FILES[@]} files"
+}
+
+restore_branding() {
+    echo "=== Restoring branding placeholders ==="
+    for f in "${BRANDING_FILES[@]}"; do
+        if [ -f "$f" ]; then
+            local repo_dir
+            repo_dir=$(cd "$(dirname "$f")" && git rev-parse --show-toplevel 2>/dev/null) || continue
+            local rel_path="${f#$repo_dir/}"
+            (cd "$repo_dir" && git checkout -- "$rel_path" 2>/dev/null) || true
+        fi
+    done
 }
 
 install_prereqs() {
@@ -82,6 +96,7 @@ build() {
     done
 
     customize_branding
+    trap 'restore_branding' EXIT
 
     perl build.pl \
         --ant-options=-DskipTests=true \
