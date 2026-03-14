@@ -6,6 +6,7 @@ services:
     environment:
       - DOMAIN=cloudxspace.com
       - ZIMBRA_HOSTNAME=mail.cloudxspace.com
+      - ADMIN_HOSTNAME=admin.cloudxspace.com
       - ADMIN_PASS=changeme
       - DNS_RESOLVER=8.8.8.8
     ports:

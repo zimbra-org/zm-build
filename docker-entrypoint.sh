@@ -5,6 +5,7 @@ DOMAIN="${DOMAIN:-example.com}"
 ZIMBRA_HOST="${ZIMBRA_HOSTNAME:-$(hostname -f)}"
 ADMIN_PASS="${ADMIN_PASS:-changeme}"
 DNS_RESOLVER="${DNS_RESOLVER:-8.8.8.8}"
+ADMIN_HOSTNAME="${ADMIN_HOSTNAME:-}"
 
 ZIMBRA_INSTALLED_MARKER="/opt/zimbra/.docker_installed"
 
@@ -98,6 +99,96 @@ install_crontab() {
     fi
 }
 
+customize_nginx() {
+    local CONF="/opt/zimbra/conf/nginx/includes/nginx.conf.web.https.default"
+    local TMPL="/opt/zimbra/conf/nginx/templates/nginx.conf.web.https.default.template"
+
+    # 1. Add static asset caching to the template (survives zmproxyctl restart)
+    if ! grep -q "Static asset caching" "$TMPL" 2>/dev/null; then
+        python3 -c "
+f = '$TMPL'
+with open(f) as fh:
+    content = fh.read()
+
+cache_block = '''    # Static asset caching - reduce round-trips on high-latency connections
+    location ~* \.(js|css|zgz|jpg|jpeg|png|gif|ico|svg|woff|woff2|ttf|eot)\$ {
+        proxy_pass          https://zimbra_ssl;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        set \$virtual_host \$http_host;
+        if (\$virtual_host = '') {
+            set \$virtual_host \$server_addr:\$server_port;
+        }
+        proxy_set_header Host \$virtual_host;
+        proxy_redirect http://\$http_host/ https://\$http_host/;
+        expires 30d;
+        add_header Cache-Control \"public, immutable\";
+    }
+
+'''
+
+target = '    location /\n    {'
+if target in content:
+    content = content.replace(target, cache_block + target, 1)
+    with open(f, 'w') as fh:
+        fh.write(content)
+    print('Nginx caching added to template')
+" 2>/dev/null
+    fi
+
+    # 2. Add admin.* server block for admin console on port 443
+    if [ -n "$ADMIN_HOSTNAME" ]; then
+        local ADMIN_CONF="/opt/zimbra/conf/nginx/includes/nginx.conf.web.admin.cxs"
+        cat > "$ADMIN_CONF" <<'ADMINEOF'
+# CXS: Admin console via admin.* subdomain on port 443
+server {
+    listen 443 ssl http2;
+    server_name ADMIN_HOST_PLACEHOLDER;
+    client_max_body_size 0;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    ssl_certificate /opt/zimbra/conf/nginx.crt;
+    ssl_certificate_key /opt/zimbra/conf/nginx.key;
+    ssl_dhparam /opt/zimbra/conf/dhparam.pem;
+
+    location / {
+        proxy_pass https://zimbra_admin;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        set $relhost $host;
+        if ($host = '') {
+            set $relhost $server_addr;
+        }
+        proxy_set_header Host $relhost:7071;
+        proxy_redirect https://$relhost:7071/ https://$host/;
+    }
+
+    location ^~ /service {
+        proxy_pass https://zimbra_admin;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        set $relhost $host;
+        if ($host = '') {
+            set $relhost $server_addr;
+        }
+        proxy_set_header Host $relhost:7071;
+        proxy_redirect https://$relhost:7071/ https://$host/;
+    }
+}
+ADMINEOF
+        sed -i "s/ADMIN_HOST_PLACEHOLDER/$ADMIN_HOSTNAME/g" "$ADMIN_CONF"
+
+        # Include this config from the main nginx.conf if not already included
+        local MAIN_CONF="/opt/zimbra/conf/nginx/includes/nginx.conf.web"
+        if ! grep -q "admin.cxs" "$MAIN_CONF" 2>/dev/null; then
+            echo "include $ADMIN_CONF;" >> "$MAIN_CONF"
+        fi
+        echo "Admin console configured at https://$ADMIN_HOSTNAME"
+    fi
+
+    # Regenerate nginx config and restart proxy
+    su - zimbra -c "/opt/zimbra/libexec/zmproxyconfgen" 2>/dev/null || true
+    su - zimbra -c "zmproxyctl restart" 2>/dev/null || true
+}
+
 start_zimbra() {
     echo "Starting Zimbra services..."
 
@@ -113,6 +204,9 @@ start_zimbra() {
 
     su - zimbra -c "zmcontrol start"
 
+    # Apply nginx customizations (caching, admin subdomain) after Zimbra starts
+    customize_nginx
+
     # Run zmstatuslog once so admin console shows status immediately
     su - zimbra -c "/opt/zimbra/libexec/zmstatuslog" 2>/dev/null || true
 
@@ -120,7 +214,11 @@ start_zimbra() {
     echo "============================================"
     echo "  Zimbra is running"
     echo "  Webmail: https://$ZIMBRA_HOST"
+    if [ -n "$ADMIN_HOSTNAME" ]; then
+    echo "  Admin:   https://$ADMIN_HOSTNAME"
+    else
     echo "  Admin:   https://$ZIMBRA_HOST:7071"
+    fi
     echo "============================================"
     echo ""
 
