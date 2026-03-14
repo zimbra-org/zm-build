@@ -17,13 +17,47 @@ BUILD_RELEASE_NO="10.1.0"
 BUILD_RELEASE="LIBERTY"
 GIT_BRANCH="cxs-development,develop,master"
 JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+
+# Branding (substituted into .properties files at build time)
+BRAND_NAME="CXS"
+BRAND_DOMAIN="cloudxspace.com"
+BRAND_COMPANY="CloudX Space"
 # ----------------------------------
 
 export JAVA_HOME
 export PATH=$JAVA_HOME/bin:$PATH
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+WORKSPACE_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$SCRIPT_DIR"
+
+customize_branding() {
+    echo "=== Applying branding: ${BRAND_NAME} / ${BRAND_DOMAIN} ==="
+    local WC="$WORKSPACE_DIR/zm-web-client"
+    local AC="$WORKSPACE_DIR/zm-admin-console"
+
+    local files=(
+        "$WC/WebRoot/messages/ZmMsg.properties"
+        "$WC/WebRoot/public/login.jsp"
+        "$WC/WebRoot/skins/cxs/skin.properties"
+        "$AC/WebRoot/messages/ZabMsg.properties"
+        "$AC/WebRoot/admin_skins/_base/base/skin.properties"
+        "$AC/WebRoot/admin_skins/carbon/skin.properties"
+        "$AC/WebRoot/admin_skins/serenity/skin.properties"
+        "$AC/WebRoot/admin_skins/cxs/skin.properties"
+    )
+
+    for f in "${files[@]}"; do
+        if [ -f "$f" ]; then
+            sed -i \
+                -e "s|@@BRAND_NAME@@|${BRAND_NAME}|g" \
+                -e "s|@@BRAND_DOMAIN@@|${BRAND_DOMAIN}|g" \
+                -e "s|@@BRAND_COMPANY@@|${BRAND_COMPANY}|g" \
+                "$f"
+        fi
+    done
+    echo "Branding applied to ${#files[@]} files"
+}
 
 install_prereqs() {
     echo "=== Installing build prerequisites ==="
@@ -46,6 +80,8 @@ build() {
             exit 1
         fi
     done
+
+    customize_branding
 
     perl build.pl \
         --ant-options=-DskipTests=true \
