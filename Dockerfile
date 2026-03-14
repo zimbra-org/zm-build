@@ -29,7 +29,7 @@ RUN apt-get update -qq && \
         libperl5.30 libaio1 libgmp10 libstdc++6 \
         coreutils procps psmisc \
         gnupg apt-transport-https ca-certificates \
-        cron && \
+        openssh-client openssh-server cron && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Pre-configure resolvconf to avoid /etc/resolv.conf symlink issue in Docker
@@ -41,6 +41,10 @@ RUN mkdir -p /run/resolvconf && \
     apt-get update -qq && \
     apt-get install -y resolvconf || true && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Prepare sshd (Zimbra mail queue monitoring requires SSH to localhost)
+RUN mkdir -p /run/sshd && \
+    ssh-keygen -A
 
 # Copy pre-built installer
 COPY zcs-installer.tgz /tmp/zcs-installer.tgz

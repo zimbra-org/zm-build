@@ -24,6 +24,7 @@ BRAND_DOMAIN="cloudxspace.com"
 BRAND_COMPANY="CloudX Space"
 BRAND_MAIL_URL="https://mail.${DOMAIN}"
 BRAND_ADMIN_URL="https://admin.${DOMAIN}"
+BRAND_SKIN="cxs"
 # ----------------------------------
 
 export JAVA_HOME
@@ -195,10 +196,18 @@ post_deploy() {
     su - zimbra -c "/opt/zimbra/libexec/zmproxyconfgen" 2>/dev/null
     su - zimbra -c "zmproxyctl restart" 2>/dev/null
 
-    # 4. Set CXS skin as default
-    echo "Setting CXS skin as default..."
-    su - zimbra -c "zmprov mc default zimbraPrefSkin cxs" 2>/dev/null || true
+    # 4. Set skin as default (COS, domain, and web.xml templates)
+    echo "Setting ${BRAND_SKIN} skin as default..."
+    su - zimbra -c "zmprov mc default zimbraPrefSkin ${BRAND_SKIN}" 2>/dev/null || true
     su - zimbra -c "zmprov mc default zimbraFeatureSkinChangeEnabled FALSE" 2>/dev/null || true
+    su - zimbra -c "zmprov md ${DOMAIN} zimbraPrefSkin ${BRAND_SKIN}" 2>/dev/null || true
+    su - zimbra -c "zmprov md ${DOMAIN} zimbraSkinLogoURL ${BRAND_MAIL_URL}" 2>/dev/null || true
+    # Fix web.xml.in templates (Zimbra regenerates web.xml from these on each restart)
+    sed -i "/<param-name>zimbraDefaultSkin<\/param-name>/{n;s|<param-value>[^<]*</param-value>|<param-value>${BRAND_SKIN}</param-value>|}" \
+        /opt/zimbra/jetty_base/etc/zimbra.web.xml.in \
+        /opt/zimbra/jetty_base/etc/zimbraAdmin.web.xml.in 2>/dev/null || true
+    sed -i "/<param-name>zimbraDefaultAdminSkin<\/param-name>/{n;s|<param-value>[^<]*</param-value>|<param-value>${BRAND_SKIN}</param-value>|}" \
+        /opt/zimbra/jetty_base/etc/zimbraAdmin.web.xml.in 2>/dev/null || true
 
     # 5. Verify services
     echo ""

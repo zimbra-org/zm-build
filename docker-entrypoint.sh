@@ -6,6 +6,8 @@ ZIMBRA_HOST="${ZIMBRA_HOSTNAME:-$(hostname -f)}"
 ADMIN_PASS="${ADMIN_PASS:-changeme}"
 DNS_RESOLVER="${DNS_RESOLVER:-8.8.8.8}"
 ADMIN_HOSTNAME="${ADMIN_HOSTNAME:-}"
+BRAND_SKIN="${BRAND_SKIN:-cxs}"
+BRAND_MAIL_URL="${BRAND_MAIL_URL:-https://$ZIMBRA_HOST}"
 
 ZIMBRA_INSTALLED_MARKER="/opt/zimbra/.docker_installed"
 
@@ -65,9 +67,36 @@ install_zimbra() {
         su - zimbra -c "zmprov ma $acct zimbraMailTransport 'lmtp:[127.0.0.1]:7025'" 2>/dev/null || true
     done
 
-    # Set CXS skin as default
-    su - zimbra -c "zmprov mc default zimbraPrefSkin cxs" || true
+    # Set skin as default (COS, domain, and web.xml templates)
+    su - zimbra -c "zmprov mc default zimbraPrefSkin $BRAND_SKIN" || true
     su - zimbra -c "zmprov mc default zimbraFeatureSkinChangeEnabled FALSE" || true
+    su - zimbra -c "zmprov md $DOMAIN zimbraPrefSkin $BRAND_SKIN" || true
+    su - zimbra -c "zmprov md $DOMAIN zimbraSkinLogoURL $BRAND_MAIL_URL" || true
+    # Fix web.xml.in templates (Zimbra regenerates web.xml from these on each restart)
+    sed -i "/<param-name>zimbraDefaultSkin<\/param-name>/{n;s|<param-value>[^<]*</param-value>|<param-value>$BRAND_SKIN</param-value>|}" \
+        /opt/zimbra/jetty_base/etc/zimbra.web.xml.in \
+        /opt/zimbra/jetty_base/etc/zimbraAdmin.web.xml.in 2>/dev/null || true
+    sed -i "/<param-name>zimbraDefaultAdminSkin<\/param-name>/{n;s|<param-value>[^<]*</param-value>|<param-value>$BRAND_SKIN</param-value>|}" \
+        /opt/zimbra/jetty_base/etc/zimbraAdmin.web.xml.in 2>/dev/null || true
+
+    # SSH setup for remote management (mail queue monitoring, etc.)
+    # Zimbra's GetMailQueueInfoRequest SSHs to the MTA host to run postqueue.
+    if [ ! -f /opt/zimbra/.ssh/zimbra_identity ]; then
+        su - zimbra -c "mkdir -p /opt/zimbra/.ssh && chmod 700 /opt/zimbra/.ssh" || true
+        su - zimbra -c "ssh-keygen -t rsa -f /opt/zimbra/.ssh/zimbra_identity -N ''" || true
+        su - zimbra -c "cat /opt/zimbra/.ssh/zimbra_identity.pub >> /opt/zimbra/.ssh/authorized_keys" || true
+        su - zimbra -c "chmod 600 /opt/zimbra/.ssh/zimbra_identity /opt/zimbra/.ssh/authorized_keys" || true
+    fi
+    # Ensure SSH config uses the right identity and skips host key prompts
+    if [ ! -f /opt/zimbra/.ssh/config ]; then
+        cat > /opt/zimbra/.ssh/config <<'SSHEOF'
+Host *
+    StrictHostKeyChecking no
+    IdentityFile /opt/zimbra/.ssh/zimbra_identity
+SSHEOF
+        chown zimbra:zimbra /opt/zimbra/.ssh/config
+        chmod 600 /opt/zimbra/.ssh/config
+    fi
 
     touch "$ZIMBRA_INSTALLED_MARKER"
     echo "============================================"
@@ -208,6 +237,9 @@ start_zimbra() {
 
     # Start cron (needed for zmstatuslog, log pruning, etc.)
     cron 2>/dev/null || true
+
+    # Start sshd (needed for mail queue monitoring — mailbox SSHs to MTA)
+    /usr/sbin/sshd 2>/dev/null || true
 
     setup_hosts
     verify_extensions
