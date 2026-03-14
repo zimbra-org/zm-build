@@ -58,6 +58,13 @@ install_zimbra() {
     su - zimbra -c "zmprov ms $ZIMBRA_HOST zimbraMailSSLProxyPort 443 zimbraMailProxyPort 80" || true
     su - zimbra -c "/opt/zimbra/libexec/zmproxyconfgen" || true
 
+    # Fix LMTP transport — inside Docker, the hostname resolves to the
+    # external IP which can't route back to the container. Use 127.0.0.1.
+    su - zimbra -c "zmprov ms $ZIMBRA_HOST zimbraMtaSmtpdVirtualTransport 'lmtp:[127.0.0.1]:7025'" || true
+    for acct in $(su - zimbra -c "zmprov -l gaa $DOMAIN" 2>/dev/null); do
+        su - zimbra -c "zmprov ma $acct zimbraMailTransport 'lmtp:[127.0.0.1]:7025'" 2>/dev/null || true
+    done
+
     touch "$ZIMBRA_INSTALLED_MARKER"
     echo "============================================"
     echo "  Zimbra installation complete"
