@@ -65,6 +65,10 @@ install_zimbra() {
         su - zimbra -c "zmprov ma $acct zimbraMailTransport 'lmtp:[127.0.0.1]:7025'" 2>/dev/null || true
     done
 
+    # Set CXS skin as default
+    su - zimbra -c "zmprov mc default zimbraPrefSkin cxs" || true
+    su - zimbra -c "zmprov mc default zimbraFeatureSkinChangeEnabled FALSE" || true
+
     touch "$ZIMBRA_INSTALLED_MARKER"
     echo "============================================"
     echo "  Zimbra installation complete"

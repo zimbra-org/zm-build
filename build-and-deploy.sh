@@ -140,12 +140,17 @@ post_deploy() {
     su - zimbra -c "/opt/zimbra/libexec/zmproxyconfgen" 2>/dev/null
     su - zimbra -c "zmproxyctl restart" 2>/dev/null
 
-    # 4. Verify services
+    # 4. Set CXS skin as default
+    echo "Setting CXS skin as default..."
+    su - zimbra -c "zmprov mc default zimbraPrefSkin cxs" 2>/dev/null || true
+    su - zimbra -c "zmprov mc default zimbraFeatureSkinChangeEnabled FALSE" 2>/dev/null || true
+
+    # 5. Verify services
     echo ""
     echo "=== Service status ==="
     su - zimbra -c "zmcontrol status"
 
-    # 5. Verify ports
+    # 6. Verify ports
     echo ""
     echo "=== Port check ==="
     ss -tlnp | grep -E ':443 |:7071 ' && echo "OK: HTTPS (443) and Admin (7071) listening" || echo "WARNING: ports not listening"
