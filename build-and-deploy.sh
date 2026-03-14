@@ -22,6 +22,8 @@ JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
 BRAND_NAME="CXS"
 BRAND_DOMAIN="cloudxspace.com"
 BRAND_COMPANY="CloudX Space"
+BRAND_MAIL_URL="https://mail.${DOMAIN}"
+BRAND_ADMIN_URL="https://admin.${DOMAIN}"
 # ----------------------------------
 
 export JAVA_HOME
@@ -55,6 +57,8 @@ customize_branding() {
                 -e "s|@@BRAND_NAME@@|${BRAND_NAME}|g" \
                 -e "s|@@BRAND_DOMAIN@@|${BRAND_DOMAIN}|g" \
                 -e "s|@@BRAND_COMPANY@@|${BRAND_COMPANY}|g" \
+                -e "s|@@BRAND_MAIL_URL@@|${BRAND_MAIL_URL}|g" \
+                -e "s|@@BRAND_ADMIN_URL@@|${BRAND_ADMIN_URL}|g" \
                 "$f"
         fi
     done
