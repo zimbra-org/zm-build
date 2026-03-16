@@ -9,6 +9,7 @@ ADMIN_HOSTNAME="${ADMIN_HOSTNAME:-}"
 BRAND_SKIN="${BRAND_SKIN:-cxs}"
 BRAND_MAIL_URL="${BRAND_MAIL_URL:-https://$ZIMBRA_HOST}"
 
+LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-admin@$DOMAIN}"
 ZIMBRA_INSTALLED_MARKER="/opt/zimbra/.docker_installed"
 
 setup_hosts() {
@@ -58,6 +59,22 @@ install_zimbra() {
     done
 
     su - zimbra -c "zmprov ms $ZIMBRA_HOST zimbraMailSSLProxyPort 443 zimbraMailProxyPort 80" || true
+
+    # Register nginx upstream services — Zimbra uses non-obvious LDAP service names:
+    #   "zimbra"      = webclient upstream (SERVICE_WEBCLIENT in ProxyConfGen.java)
+    #   "zimbraAdmin" = admin console upstream (SERVICE_ADMINCLIENT)
+    #   "service"     = mailstore upstream (SERVICE_MAILCLIENT)
+    # Without these, zmproxyconfgen finds no upstream servers and nginx won't serve port 443.
+    su - zimbra -c "zmprov ms $ZIMBRA_HOST \
+        +zimbraServiceEnabled zimbra \
+        +zimbraServiceEnabled zimbraAdmin \
+        +zimbraServiceEnabled service \
+        +zimbraReverseProxyUpstreamLoginServers $ZIMBRA_HOST \
+        zimbraReverseProxyAdminEnabled TRUE" || true
+
+    # Create nginx.conf symlink (nginx expects it at common/conf/)
+    ln -sf /opt/zimbra/conf/nginx.conf /opt/zimbra/common/conf/nginx.conf 2>/dev/null || true
+
     su - zimbra -c "/opt/zimbra/libexec/zmproxyconfgen" || true
 
     # Fix LMTP transport — inside Docker, the hostname resolves to the
@@ -137,6 +154,56 @@ install_crontab() {
             2>/dev/null | crontab -u zimbra - 2>/dev/null
         echo "Zimbra crontab installed"
     fi
+}
+
+setup_ssl() {
+    echo "=== Setting up Let's Encrypt SSL certificate ==="
+
+    # Stop proxy to free port 80 for certbot
+    su - zimbra -c "zmproxyctl stop" 2>/dev/null || true
+    sleep 2
+
+    # Get Let's Encrypt cert
+    local CERT_DOMAINS="-d $ZIMBRA_HOST"
+    if [ -n "$ADMIN_HOSTNAME" ] && [ "$ADMIN_HOSTNAME" != "$ZIMBRA_HOST" ]; then
+        CERT_DOMAINS="$CERT_DOMAINS -d $ADMIN_HOSTNAME"
+    fi
+
+    certbot certonly --standalone $CERT_DOMAINS \
+        --non-interactive --agree-tos --email "$LETSENCRYPT_EMAIL" \
+        --cert-name "$ZIMBRA_HOST"
+
+    local CERT_DIR="/etc/letsencrypt/live/${ZIMBRA_HOST}"
+    if [ ! -f "$CERT_DIR/privkey.pem" ]; then
+        echo "WARNING: Let's Encrypt certificate not obtained, keeping self-signed cert"
+        su - zimbra -c "zmproxyctl start" 2>/dev/null || true
+        return 1
+    fi
+
+    # Deploy to Zimbra
+    cp "$CERT_DIR/privkey.pem" /opt/zimbra/ssl/zimbra/commercial/commercial.key
+    cp "$CERT_DIR/cert.pem" /opt/zimbra/ssl/zimbra/commercial/commercial.crt
+
+    # Build CA chain
+    wget -q https://letsencrypt.org/certs/isrgrootx1.pem -O /tmp/isrg-root.pem 2>/dev/null || true
+    if [ -f /tmp/isrg-root.pem ]; then
+        cat "$CERT_DIR/chain.pem" /tmp/isrg-root.pem > /opt/zimbra/ssl/zimbra/commercial/commercial_ca.crt
+        rm -f /tmp/isrg-root.pem
+    else
+        cp "$CERT_DIR/chain.pem" /opt/zimbra/ssl/zimbra/commercial/commercial_ca.crt
+    fi
+
+    chown zimbra:zimbra /opt/zimbra/ssl/zimbra/commercial/*
+
+    su - zimbra -c "zmcertmgr verifycrt comm" || true
+    su - zimbra -c "zmcertmgr deploycrt comm \
+        /opt/zimbra/ssl/zimbra/commercial/commercial.crt \
+        /opt/zimbra/ssl/zimbra/commercial/commercial_ca.crt"
+
+    # Restart all services to use new cert
+    su - zimbra -c "zmcontrol restart"
+
+    echo "=== SSL certificate deployed ==="
 }
 
 customize_nginx() {
@@ -245,6 +312,9 @@ start_zimbra() {
     verify_extensions
     install_crontab
 
+    # Ensure nginx.conf symlink exists (may not persist across container restarts)
+    ln -sf /opt/zimbra/conf/nginx.conf /opt/zimbra/common/conf/nginx.conf 2>/dev/null || true
+
     su - zimbra -c "zmcontrol start"
 
     # Apply nginx customizations (caching, admin subdomain) after Zimbra starts
@@ -266,6 +336,18 @@ start_zimbra() {
     echo ""
 
     su - zimbra -c "zmcontrol status"
+
+    # Setup Let's Encrypt SSL (if certbot is available and no valid commercial cert exists)
+    if command -v certbot &>/dev/null; then
+        local CERT_TYPE=$(su - zimbra -c "zmcertmgr viewdeployedcrt" 2>/dev/null | grep "issuer=" | head -1)
+        if echo "$CERT_TYPE" | grep -qi "let's encrypt\|R3\|R10\|R11\|E5\|E6"; then
+            echo "Let's Encrypt cert already deployed, checking renewal..."
+            certbot renew --quiet 2>/dev/null || true
+        elif echo "$CERT_TYPE" | grep -qi "zimbra"; then
+            echo "Self-signed cert detected, getting Let's Encrypt cert..."
+            setup_ssl
+        fi
+    fi
 }
 
 stop_zimbra() {
@@ -309,6 +391,10 @@ case "${1:-start}" in
 
     status)
         su - zimbra -c "zmcontrol status"
+        ;;
+
+    setup-ssl)
+        setup_ssl
         ;;
 
     shell)

@@ -175,26 +175,47 @@ setup_ssl() {
 post_deploy() {
     echo "=== Running post-deploy fixes ==="
 
-    # 1. Fix proxy ports (nginx must listen on 443)
-    local CURRENT_PORT=$(su - zimbra -c "zmprov gs \$(zmhostname) zimbraMailSSLProxyPort" 2>/dev/null | grep zimbraMailSSLProxyPort | awk '{print $2}')
+    local ZM_HOST
+    ZM_HOST=$(su - zimbra -c "zmhostname" 2>/dev/null)
+
+    # 1. Register required services for nginx upstream discovery
+    #    Zimbra's zmproxyconfgen uses these LDAP service names (not the obvious ones):
+    #      "zimbra"      -> webclient upstream servers (SERVICE_WEBCLIENT)
+    #      "zimbraAdmin"  -> admin console upstream servers (SERVICE_ADMINCLIENT)
+    #      "service"      -> mailstore upstream servers (SERVICE_MAILCLIENT)
+    echo "Registering proxy upstream services..."
+    su - zimbra -c "zmprov ms ${ZM_HOST} \
+        +zimbraServiceEnabled zimbra \
+        +zimbraServiceEnabled zimbraAdmin \
+        +zimbraServiceEnabled service \
+        +zimbraReverseProxyUpstreamLoginServers ${ZM_HOST} \
+        zimbraReverseProxyAdminEnabled TRUE"
+
+    # 2. Fix proxy ports (nginx must listen on 443)
+    local CURRENT_PORT=$(su - zimbra -c "zmprov gs ${ZM_HOST} zimbraMailSSLProxyPort" 2>/dev/null | grep zimbraMailSSLProxyPort | awk '{print $2}')
     if [ "$CURRENT_PORT" != "443" ]; then
         echo "Fixing proxy ports (was $CURRENT_PORT, setting to 443)..."
-        su - zimbra -c "zmprov ms \$(zmhostname) zimbraMailSSLProxyPort 443 zimbraMailProxyPort 80"
-        su - zimbra -c "/opt/zimbra/libexec/zmproxyconfgen"
-        su - zimbra -c "zmproxyctl restart"
+        su - zimbra -c "zmprov ms ${ZM_HOST} zimbraMailSSLProxyPort 443 zimbraMailProxyPort 80"
     else
         echo "Proxy ports OK (443)"
     fi
 
-    # 2. Exclude snap mounts from disk monitoring
+    # 3. Exclude snap mounts from disk monitoring
     echo "Setting disk monitor to ignore snap mounts..."
     su - zimbra -c "zmlocalconfig -e zmdisklog_exclude_pattern='/snap'"
     su - zimbra -c "zmstatctl restart"
 
-    # 3. Regenerate proxy config (in case templates changed)
+    # 4. Create nginx.conf symlink (nginx expects it at common/conf/)
+    if [ ! -e /opt/zimbra/common/conf/nginx.conf ]; then
+        echo "Creating nginx.conf symlink..."
+        ln -sf /opt/zimbra/conf/nginx.conf /opt/zimbra/common/conf/nginx.conf
+    fi
+
+    # 5. Regenerate proxy config and restart
     echo "Regenerating proxy config..."
-    su - zimbra -c "/opt/zimbra/libexec/zmproxyconfgen" 2>/dev/null
-    su - zimbra -c "zmproxyctl restart" 2>/dev/null
+    su - zimbra -c "/opt/zimbra/libexec/zmproxyconfgen"
+    su - zimbra -c "zmproxyctl stop" 2>/dev/null || true
+    su - zimbra -c "zmproxyctl start"
 
     # 4. Set skin as default (COS, domain, and web.xml templates)
     echo "Setting ${BRAND_SKIN} skin as default..."

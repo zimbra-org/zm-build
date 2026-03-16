@@ -29,7 +29,7 @@ RUN apt-get update -qq && \
         libperl5.30 libaio1 libgmp10 libstdc++6 \
         coreutils procps psmisc \
         gnupg apt-transport-https ca-certificates \
-        openssh-client openssh-server cron && \
+        openssh-client openssh-server cron certbot && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Pre-configure resolvconf to avoid /etc/resolv.conf symlink issue in Docker
