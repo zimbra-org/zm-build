@@ -1,8 +1,14 @@
-# CXS Zimbra Lightweight
+# Zimbra FOSS (Email + Calendar)
 
-A stripped-down Zimbra Collaboration Suite build focused on **webmail + admin console only**. Based on [Zimbra FOSS](https://www.zimbra.com/), with calendar, tasks, briefcase, spell-check, and other non-essential components removed.
+A Zimbra Collaboration Suite build focused on **email + calendar + admin console**. Based on [Zimbra FOSS](https://www.zimbra.com/), with briefcase, tasks, voicemail, portal, and other non-essential components removed.
 
 ## Quick Start (Docker)
+
+```bash
+docker compose up -d
+```
+
+Or pull and run directly:
 
 ```bash
 docker run -d --name zimbra -h mail.example.com \
@@ -13,7 +19,7 @@ docker run -d --name zimbra -h mail.example.com \
   william1988/cxs-zimbra:1.0.0
 ```
 
-First start takes ~10 minutes (installs Zimbra, configures nginx, gets Let's Encrypt SSL cert). Subsequent restarts are fast (~2 minutes).
+First start takes ~10 minutes (installs Zimbra, configures nginx, gets Let's Encrypt SSL cert). Subsequent restarts take ~2 minutes.
 
 - **Webmail**: https://mail.example.com
 - **Admin Console**: https://mail.example.com:7071
@@ -32,12 +38,16 @@ docker compose up -d
 
 1. Installs all Zimbra packages
 2. Configures LDAP, MTA, mailbox, proxy
-3. **Registers nginx upstream services** (`zimbra`, `zimbraAdmin`, `service`) so the proxy can discover its backends
-4. **Sets login upstream server** (`zimbraReverseProxyUpstreamLoginServers`) so the webmail login page routes correctly
-5. **Creates nginx.conf symlink** (`/opt/zimbra/common/conf/` -> `/opt/zimbra/conf/`)
-6. **Gets Let's Encrypt SSL certificate** automatically via certbot (requires port 80 open and DNS A record pointing to the server)
-7. Deploys SSL cert to all Zimbra services (proxy, mailbox, MTA, LDAP)
-8. Sets default skin, configures LMTP transport for Docker networking
+3. Registers nginx upstream services (`zimbra`, `zimbraAdmin`, `service`) so the proxy can discover its backends
+4. Sets login upstream server (`zimbraReverseProxyUpstreamLoginServers`)
+5. Creates nginx.conf symlink (`/opt/zimbra/common/conf/` → `/opt/zimbra/conf/`)
+6. Sets proxy ports (443/80) and public service URL
+7. Enables email + calendar, disables briefcase/tasks
+8. Sets default skin to serenity (standard Zimbra)
+9. Configures LMTP transport for Docker networking
+10. Sets up SSH keys for mail queue monitoring
+11. Adds nginx static asset caching
+12. Gets Let's Encrypt SSL certificate automatically (requires port 80 open and DNS A record)
 
 ### Environment Variables
 
@@ -48,13 +58,13 @@ docker compose up -d
 | `ADMIN_PASS` | `changeme` | Admin password and LDAP passwords |
 | `ADMIN_HOSTNAME` | _(empty)_ | Optional separate hostname for admin console on port 443 |
 | `DNS_RESOLVER` | `8.8.8.8` | DNS resolver for Zimbra |
-| `BRAND_SKIN` | `cxs` | Default webmail skin |
+| `BRAND_SKIN` | `serenity` | Default webmail skin |
 | `LETSENCRYPT_EMAIL` | `admin@$DOMAIN` | Email for Let's Encrypt notifications |
 
 ### Prerequisites (before starting)
 
-1. **DNS A record**: `mail.yourdomain.com` -> your server IP
-2. **DNS MX record**: `yourdomain.com` -> `mail.yourdomain.com`
+1. **DNS A record**: `mail.yourdomain.com` → your server IP
+2. **DNS MX record**: `yourdomain.com` → `mail.yourdomain.com`
 3. **Port 80 open**: Required for Let's Encrypt certificate issuance
 4. **Ports open**: 25, 80, 443, 465, 587, 993, 995, 7071
 
@@ -73,7 +83,7 @@ docker compose up -d
 
 ### Data Persistence
 
-All Zimbra data is stored on the host under `./data/zimbra/` via a bind mount. This keeps everything out of Docker and makes backup/migration easy.
+All Zimbra data is stored on the host under `./data/zimbra/` via a bind mount.
 
 ```yaml
 # In docker-compose.yml:
@@ -85,11 +95,19 @@ Key directories inside `./data/zimbra/`:
 - `store/` — Mailbox message store
 - `data/ldap/` — OpenLDAP database
 - `db/` — MySQL/MariaDB data
-- `conf/` — Config, certs, keys (localconfig.xml, slapd.crt, etc.)
+- `conf/` — Config, certs, keys
 - `log/` — Zimbra logs
 - `index/`, `redolog/`, `backup/` — Search indexes, redo logs, backups
 
-To reset: stop the container and `rm -rf ./data/`.
+### Clean Redeploy (reset everything)
+
+```bash
+docker compose down
+rm -rf ./data/zimbra/* ./data/zimbra/.*
+docker compose up -d
+```
+
+**Important**: You must include `./data/zimbra/.*` to remove the hidden `.docker_installed` marker file, otherwise the container will skip installation on next start.
 
 ### Container Commands
 
@@ -108,6 +126,9 @@ docker exec cxs-zimbra docker-entrypoint.sh setup-ssl
 
 # View logs
 docker exec cxs-zimbra tail -f /opt/zimbra/log/mailbox.log
+
+# Set admin password
+docker exec cxs-zimbra su - zimbra -c "zmprov sp admin@yourdomain.com YOUR_PASSWORD"
 ```
 
 ### Build the Docker Image
@@ -131,9 +152,10 @@ docker push william1988/cxs-zimbra:1.0.0
 | Problem | Solution |
 |---------|----------|
 | SSL certificate warning in browser | Port 80 was blocked during first start, so Let's Encrypt failed. Run `docker exec cxs-zimbra docker-entrypoint.sh setup-ssl` |
-| Port 443 not listening | Upstream services not registered. Check `docker logs cxs-zimbra` for "no upstream" errors. Restart container: `docker compose down && rm -rf ./data && docker compose up -d` |
+| Port 443 not listening | Upstream services not registered. Reset: `docker compose down && rm -rf ./data/zimbra/* ./data/zimbra/.* && docker compose up -d` |
 | 502 Bad Gateway | Login upstream not set or mailbox still starting. Wait 2 minutes, then check `docker exec cxs-zimbra su - zimbra -c "zmcontrol status"` |
-| Container starts but services don't run | Check `docker logs cxs-zimbra`. If "user zimbra does not exist", the data dir is corrupted. Reset: `docker compose down && rm -rf ./data && docker compose up -d` |
+| Container starts but services don't run | Data dir corrupted. Reset: `docker compose down && rm -rf ./data/zimbra/* ./data/zimbra/.* && docker compose up -d` |
+| Change password link goes to port 8443 | `zimbraPublicService*` not set. Run: `docker exec cxs-zimbra su - zimbra -c "zmprov md yourdomain.com zimbraPublicServiceHostname mail.yourdomain.com zimbraPublicServicePort 443 zimbraPublicServiceProtocol https"` |
 | Slow first start | Normal — first run downloads packages, installs Zimbra, configures services, and gets SSL cert (~10 minutes) |
 
 ## Building from Source
@@ -163,8 +185,6 @@ The `.tgz` installer will be in `~/workspace/zimbra-org/BUILDS/`.
 
 ### Build & Deploy (bare metal)
 
-The `build-and-deploy.sh` script handles the full lifecycle:
-
 ```bash
 ./build-and-deploy.sh                          # Build + deploy (interactive)
 ./build-and-deploy.sh --build-only             # Build only
@@ -188,20 +208,7 @@ perl build.pl \
   --no-interactive
 ```
 
-You can also set options in a `config.build` file:
-
-```
-BUILD_RELEASE               = LIBERTY
-BUILD_RELEASE_NO            = 10.1.0
-BUILD_RELEASE_CANDIDATE     = GA
-BUILD_TYPE                  = FOSS
-BUILD_THIRDPARTY_SERVER     = files.zimbra.com
-INTERACTIVE                 = 0
-```
-
-Then just run `./build.pl`.
-
-### Key Environment Variables
+### Key Build Environment Variables
 
 | Variable | Description |
 |----------|-------------|
@@ -214,8 +221,10 @@ Then just run `./build.pl`.
 
 ### What's Included
 
-- Webmail client (zm-web-client)
-- Admin console (zm-admin-console)
+- Email (webmail client)
+- Calendar + group calendar
+- Contacts / address book
+- Admin console
 - LDAP directory
 - MTA (Postfix)
 - Proxy (nginx)
@@ -226,183 +235,24 @@ Then just run `./build.pl`.
 ### What's Removed (vs stock Zimbra)
 
 - Spell checker (zimbra-apache, zimbra-spell)
-- Calendar/Tasks features
 - Briefcase/Notebook features
-- Chat
-- 17 unnecessary repositories
+- Tasks
+- Voicemail
+- Portal/Portlets
+- Docs editor
 
 ### Build System
 
-- `build.pl` - Main build orchestrator (Perl)
-- `instructions/FOSS_repo_list.pl` - 42 git repositories to clone
-- `instructions/FOSS_staging_list.pl` - 36 build stages
-- `instructions/FOSS_package_list.pl` - 9 packages
-- `instructions/bundling-scripts/` - Package bundling scripts
+- `build.pl` — Main build orchestrator (Perl)
+- `instructions/FOSS_repo_list.pl` — Git repositories to clone
+- `instructions/FOSS_staging_list.pl` — Build stages
+- `instructions/FOSS_package_list.pl` — Packages to create
+- `instructions/bundling-scripts/` — Package bundling scripts
 
 ### Build Flow
 
-1. **Init** - Parse options, detect OS, validate prerequisites
-2. **Prepare** - Create dirs, download third-party JARs
-3. **Checkout** - Clone/update 42 repositories
-4. **Build** - Execute 36 build stages (ant/mvn/make), bundle 9 packages
-5. **Deploy** - Create package repository, generate installer `.tgz`
-
-## Deployment Guide (Bare Metal)
-
-This section covers deploying CXS Zimbra on a bare-metal Ubuntu 20.04 server step by step.
-
-### 1. Server Requirements
-
-- Ubuntu 20.04 LTS (64-bit)
-- Minimum 8 GB RAM, 4 CPU cores
-- Valid FQDN pointing to the server (e.g. `mail.yourdomain.com`)
-- Ports open: 25, 80, 443, 465, 587, 993, 995, 7071
-- DNS records configured:
-  - **A record**: `mail.yourdomain.com` → your server IP
-  - **MX record**: `yourdomain.com` → `mail.yourdomain.com`
-  - **SPF**: `v=spf1 mx ~all`
-
-### 2. Install Build Prerequisites
-
-```bash
-./build-and-deploy.sh --install-prereqs
-```
-
-This installs: `openjdk-8-jdk`, `ant`, `ant-optional`, `maven`, `ruby`, `debhelper`, `rpm`, `build-essential`, `git`.
-
-### 3. Build the Installer
-
-```bash
-export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
-./build-and-deploy.sh --build-only
-```
-
-This takes 30-60 minutes. The `.tgz` installer will be in `~/workspace/zimbra-org/BUILDS/`.
-
-### 4. Deploy the Installer
-
-```bash
-./build-and-deploy.sh --deploy-only /path/to/zcs-*.tgz
-```
-
-The installer will launch an interactive menu. Configure these settings:
-
-| Setting | Recommended Value |
-|---------|-------------------|
-| Common Configuration > Hostname | `mail.yourdomain.com` |
-| Common Configuration > LDAP master host | `mail.yourdomain.com` |
-| zimbra-store > Admin user | `admin@yourdomain.com` |
-| zimbra-store > Admin password | Set a strong password |
-
-When done, press **`a`** to apply the configuration.
-
-### 5. Fix: "Installing mailboxd SSL certificates...failed"
-
-If setup fails at "Installing mailboxd SSL certificates", this is because LDAP wasn't fully ready when `zmprov` tried to save the certificate. The cert files themselves are already deployed. Fix it with:
-
-```bash
-# 1. Make sure LDAP is running
-su - zimbra -c "ldap status"
-su - zimbra -c "ldap start"    # if not running
-
-# 2. Re-deploy the self-signed certificate
-su - zimbra -c "/opt/zimbra/bin/zmcertmgr deploycrt self"
-
-# 3. Re-run setup to continue from where it stopped
-/opt/zimbra/libexec/zmsetup.pl
-```
-
-If `zmprov` still fails, check the server is registered in LDAP:
-
-```bash
-su - zimbra -c "zmprov gs $(hostname -f) zimbraServiceHostname"
-```
-
-### 6. Post-Deploy Fixes
-
-After the installer finishes:
-
-```bash
-./build-and-deploy.sh --post-deploy
-```
-
-This does:
-- **Registers nginx upstream services** — Zimbra uses non-obvious LDAP service names for proxy discovery: `zimbra` (webclient), `zimbraAdmin` (admin console), `service` (mailstore). Without these, nginx has no upstream servers and port 443 won't work.
-- Sets `zimbraReverseProxyUpstreamLoginServers` so the login page routes correctly (without this, nginx returns 502 trying to resolve `zimbra_login_ssl`)
-- Enables admin console via reverse proxy (`zimbraReverseProxyAdminEnabled TRUE`)
-- Creates the `nginx.conf` symlink (`/opt/zimbra/common/conf/` -> `/opt/zimbra/conf/`)
-- Sets nginx proxy ports to 443/80
-- Excludes snap mounts from disk monitoring
-- Regenerates proxy config
-- Sets default skin to `cxs`
-- Verifies all services are running
-
-### 7. Setup SSL (Let's Encrypt)
-
-Replace the self-signed certificate with a real one:
-
-```bash
-./build-and-deploy.sh --setup-ssl
-```
-
-This uses `certbot` in standalone mode (stops proxy briefly to free port 80), gets a Let's Encrypt certificate, and deploys it to Zimbra.
-
-### 8. Verify Deployment
-
-```bash
-# Check all services
-su - zimbra -c "zmcontrol status"
-
-# Check ports
-ss -tlnp | grep -E ':443 |:7071 '
-
-# Test webmail
-curl -k https://mail.yourdomain.com
-
-# Test admin console
-curl -k https://mail.yourdomain.com:7071
-```
-
-### 9. Set Admin Password
-
-```bash
-su - zimbra -c "zmprov sp admin@yourdomain.com YOUR_PASSWORD"
-```
-
-### 10. Access
-
-- **Webmail**: `https://mail.yourdomain.com`
-- **Admin Console**: `https://mail.yourdomain.com:7071`
-
-### Troubleshooting
-
-| Problem | Solution |
-|---------|----------|
-| SSL cert install failed | See Step 5 above — re-deploy cert after LDAP is running |
-| Port 443 not listening / nginx "no servers are inside upstream" | Upstream services not registered. Run `./build-and-deploy.sh --post-deploy` — it registers the required LDAP services (`zimbra`, `zimbraAdmin`, `service`) that nginx needs to discover upstream servers |
-| Blank page on webmail | Skin not deployed. Run `./build-and-deploy.sh --post-deploy` to set default skin |
-| Port 7071 not listening | Run `su - zimbra -c "zmmailboxdctl start"` |
-| LDAP won't start | Check `/opt/zimbra/log/slapd.log` and ensure hostname resolves correctly |
-| Services fail after reboot | Run `su - zimbra -c "zmcontrol start"` (no auto-start by default) |
-| Setup log location | `/tmp/zmsetup.*.log` |
-| "Notification failed" at end of setup | Harmless — Zimbra's tracking server was unreachable. Setup completed successfully, ignore this. |
-
-## Development
-
-### zm-mailbox Build Order
-
-Build order for zm-mailbox subdirectories (dependencies via ivy.xml):
-
-1. `native`
-2. `common`
-3. `soap`
-4. `client`
-5. `store`
-
-From each subdirectory:
-
-```bash
-ant -Dzimbra.buildinfo.version=8.7.6_GA clean compile publish-local deploy
-```
-
-`publish-local` adds artifacts to `~/.zcs-deps`; `deploy` installs to runtime location and restarts services.
+1. **Init** — Parse options, detect OS, validate prerequisites
+2. **Prepare** — Create dirs, download third-party JARs
+3. **Checkout** — Clone/update repositories
+4. **Build** — Execute build stages (ant/mvn/make), bundle packages
+5. **Deploy** — Create package repository, generate installer `.tgz`
