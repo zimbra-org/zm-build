@@ -288,7 +288,7 @@ ADMINEOF
 
         # Include this config from the main nginx.conf if not already included
         local MAIN_CONF="/opt/zimbra/conf/nginx/includes/nginx.conf.web"
-        if ! grep -q "admin.cxs" "$MAIN_CONF" 2>/dev/null; then
+        if ! grep -q "admin.custom" "$MAIN_CONF" 2>/dev/null; then
             echo "include $ADMIN_CONF;" >> "$MAIN_CONF"
         fi
         echo "Admin console configured at https://$ADMIN_HOSTNAME"
