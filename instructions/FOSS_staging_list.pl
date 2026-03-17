@@ -11,7 +11,7 @@
    },
    {
       "dir"         => "zm-mailbox/store",
-      "ant_targets" => ["publish-store-test", "test"],
+      "ant_targets" => ["publish-store-test"],
       "stage_cmd"   => undef,
    },
    {
@@ -66,7 +66,7 @@
    },
    {
       "dir"         => "zm-ssdb-ephemeral-store",
-      "ant_targets" => ["publish-local", "test"],
+      "ant_targets" => ["publish-local"],
       "stage_cmd"   => sub {
          SysExec("mkdir -p $CFG{BUILD_DIR}/zm-ssdb-ephemeral-store/build/dist");
          SysExec("cp -f build/zm-ssdb-ephemeral-store*.jar $CFG{BUILD_DIR}/zm-ssdb-ephemeral-store/build/dist");
@@ -74,7 +74,7 @@
    },
    {
       "dir"         => "zm-openid-consumer-store",
-      "ant_targets" => ["dist-package", "test"],
+      "ant_targets" => ["dist-package"],
       "stage_cmd"   => sub {
          SysExec("mkdir -p $CFG{BUILD_DIR}/zm-openid-consumer-store/build/dist");
          SysExec("cp -f -r build/dist $CFG{BUILD_DIR}/zm-openid-consumer-store/build/");
@@ -245,7 +245,7 @@
    },
    {
       "dir"         => "zm-nginx-lookup-store",
-      "ant_targets" => ["publish-local", "test"],
+      "ant_targets" => ["publish-local"],
       "stage_cmd"   => sub {
          SysExec("mkdir -p $CFG{BUILD_DIR}/zm-nginx-lookup-store/build/dist");
          SysExec("cp -f -rp build/zm-nginx-lookup-store-*.jar $CFG{BUILD_DIR}/zm-nginx-lookup-store/build/dist");

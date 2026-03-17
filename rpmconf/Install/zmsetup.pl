@@ -6213,8 +6213,8 @@ sub configSetCEFeatures {
     configLog($key);
   }
 
-  # Disable non-core features for lightweight webmail+admin build
-  foreach my $key (qw(zimbraFeatureCalendarEnabled zimbraFeatureGroupCalendarEnabled zimbraFeatureNotebookEnabled)) {
+  # Disable non-core features (keep email + calendar)
+  foreach my $key (qw(zimbraFeatureNotebookEnabled)) {
     if ($configStatus{$key} eq "CONFIGURED") {
       configLog($key);
       next;

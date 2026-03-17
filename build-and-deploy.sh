@@ -18,13 +18,13 @@ BUILD_RELEASE="LIBERTY"
 GIT_BRANCH="cxs-development,develop,master"
 JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
 
-# Branding (substituted into .properties files at build time)
-BRAND_NAME="CXS"
-BRAND_DOMAIN="cloudxspace.com"
-BRAND_COMPANY="CloudX Space"
+# Branding
+BRAND_NAME="Zimbra"
+BRAND_DOMAIN="zimbra.com"
+BRAND_COMPANY="Synacor, Inc."
 BRAND_MAIL_URL="https://mail.${DOMAIN}"
-BRAND_ADMIN_URL="https://admin.${DOMAIN}"
-BRAND_SKIN="cxs"
+BRAND_ADMIN_URL="https://mail.${DOMAIN}:7071"
+BRAND_SKIN="serenity"
 # ----------------------------------
 
 export JAVA_HOME
@@ -37,45 +37,11 @@ cd "$SCRIPT_DIR"
 BRANDING_FILES=()
 
 customize_branding() {
-    echo "=== Applying branding: ${BRAND_NAME} / ${BRAND_DOMAIN} ==="
-    local WC="$WORKSPACE_DIR/zm-web-client"
-    local AC="$WORKSPACE_DIR/zm-admin-console"
-
-    BRANDING_FILES=(
-        "$WC/WebRoot/messages/ZmMsg.properties"
-        "$WC/WebRoot/public/login.jsp"
-        "$WC/WebRoot/skins/cxs/skin.properties"
-        "$AC/WebRoot/messages/ZabMsg.properties"
-        "$AC/WebRoot/admin_skins/_base/base/skin.properties"
-        "$AC/WebRoot/admin_skins/carbon/skin.properties"
-        "$AC/WebRoot/admin_skins/serenity/skin.properties"
-        "$AC/WebRoot/admin_skins/cxs/skin.properties"
-    )
-
-    for f in "${BRANDING_FILES[@]}"; do
-        if [ -f "$f" ]; then
-            sed -i \
-                -e "s|@@BRAND_NAME@@|${BRAND_NAME}|g" \
-                -e "s|@@BRAND_DOMAIN@@|${BRAND_DOMAIN}|g" \
-                -e "s|@@BRAND_COMPANY@@|${BRAND_COMPANY}|g" \
-                -e "s|@@BRAND_MAIL_URL@@|${BRAND_MAIL_URL}|g" \
-                -e "s|@@BRAND_ADMIN_URL@@|${BRAND_ADMIN_URL}|g" \
-                "$f"
-        fi
-    done
-    echo "Branding applied to ${#BRANDING_FILES[@]} files"
+    echo "=== Using standard Zimbra branding ==="
 }
 
 restore_branding() {
-    echo "=== Restoring branding placeholders ==="
-    for f in "${BRANDING_FILES[@]}"; do
-        if [ -f "$f" ]; then
-            local repo_dir
-            repo_dir=$(cd "$(dirname "$f")" && git rev-parse --show-toplevel 2>/dev/null) || continue
-            local rel_path="${f#$repo_dir/}"
-            (cd "$repo_dir" && git checkout -- "$rel_path" 2>/dev/null) || true
-        fi
-    done
+    true
 }
 
 install_prereqs() {
@@ -217,18 +183,17 @@ post_deploy() {
     su - zimbra -c "zmproxyctl stop" 2>/dev/null || true
     su - zimbra -c "zmproxyctl start"
 
-    # 4. Set skin as default (COS, domain, and web.xml templates)
+    # 4. Set default skin and disable unused features
     echo "Setting ${BRAND_SKIN} skin as default..."
     su - zimbra -c "zmprov mc default zimbraPrefSkin ${BRAND_SKIN}" 2>/dev/null || true
-    su - zimbra -c "zmprov mc default zimbraFeatureSkinChangeEnabled FALSE" 2>/dev/null || true
     su - zimbra -c "zmprov md ${DOMAIN} zimbraPrefSkin ${BRAND_SKIN}" 2>/dev/null || true
-    su - zimbra -c "zmprov md ${DOMAIN} zimbraSkinLogoURL ${BRAND_MAIL_URL}" 2>/dev/null || true
-    # Fix web.xml.in templates (Zimbra regenerates web.xml from these on each restart)
-    sed -i "/<param-name>zimbraDefaultSkin<\/param-name>/{n;s|<param-value>[^<]*</param-value>|<param-value>${BRAND_SKIN}</param-value>|}" \
-        /opt/zimbra/jetty_base/etc/zimbra.web.xml.in \
-        /opt/zimbra/jetty_base/etc/zimbraAdmin.web.xml.in 2>/dev/null || true
-    sed -i "/<param-name>zimbraDefaultAdminSkin<\/param-name>/{n;s|<param-value>[^<]*</param-value>|<param-value>${BRAND_SKIN}</param-value>|}" \
-        /opt/zimbra/jetty_base/etc/zimbraAdmin.web.xml.in 2>/dev/null || true
+
+    # Disable features we removed (briefcase, tasks) and enable calendar
+    echo "Configuring features (email + calendar only)..."
+    su - zimbra -c "zmprov mc default zimbraFeatureBriefcasesEnabled FALSE" 2>/dev/null || true
+    su - zimbra -c "zmprov mc default zimbraFeatureTasksEnabled FALSE" 2>/dev/null || true
+    su - zimbra -c "zmprov mc default zimbraFeatureCalendarEnabled TRUE" 2>/dev/null || true
+    su - zimbra -c "zmprov mc default zimbraFeatureGroupCalendarEnabled TRUE" 2>/dev/null || true
 
     # 5. Verify services
     echo ""
