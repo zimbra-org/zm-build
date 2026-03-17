@@ -84,17 +84,20 @@ install_zimbra() {
         su - zimbra -c "zmprov ma $acct zimbraMailTransport 'lmtp:[127.0.0.1]:7025'" 2>/dev/null || true
     done
 
-    # Set skin as default (COS, domain, and web.xml templates)
+    # Set default skin
     su - zimbra -c "zmprov mc default zimbraPrefSkin $BRAND_SKIN" || true
-    su - zimbra -c "zmprov mc default zimbraFeatureSkinChangeEnabled FALSE" || true
     su - zimbra -c "zmprov md $DOMAIN zimbraPrefSkin $BRAND_SKIN" || true
-    su - zimbra -c "zmprov md $DOMAIN zimbraSkinLogoURL $BRAND_MAIL_URL" || true
-    # Fix web.xml.in templates (Zimbra regenerates web.xml from these on each restart)
-    sed -i "/<param-name>zimbraDefaultSkin<\/param-name>/{n;s|<param-value>[^<]*</param-value>|<param-value>$BRAND_SKIN</param-value>|}" \
-        /opt/zimbra/jetty_base/etc/zimbra.web.xml.in \
-        /opt/zimbra/jetty_base/etc/zimbraAdmin.web.xml.in 2>/dev/null || true
-    sed -i "/<param-name>zimbraDefaultAdminSkin<\/param-name>/{n;s|<param-value>[^<]*</param-value>|<param-value>$BRAND_SKIN</param-value>|}" \
-        /opt/zimbra/jetty_base/etc/zimbraAdmin.web.xml.in 2>/dev/null || true
+
+    # Enable calendar, disable briefcase/tasks
+    su - zimbra -c "zmprov mc default zimbraFeatureCalendarEnabled TRUE" || true
+    su - zimbra -c "zmprov mc default zimbraFeatureGroupCalendarEnabled TRUE" || true
+    su - zimbra -c "zmprov mc default zimbraFeatureBriefcasesEnabled FALSE" || true
+    su - zimbra -c "zmprov mc default zimbraFeatureTasksEnabled FALSE" || true
+
+    # Set public service URL so links (change password, etc.) use proxy port 443
+    su - zimbra -c "zmprov md $DOMAIN zimbraPublicServiceHostname $ZIMBRA_HOST" || true
+    su - zimbra -c "zmprov md $DOMAIN zimbraPublicServicePort 443" || true
+    su - zimbra -c "zmprov md $DOMAIN zimbraPublicServiceProtocol https" || true
 
     # SSH setup for remote management (mail queue monitoring, etc.)
     # Zimbra's GetMailQueueInfoRequest SSHs to the MTA host to run postqueue.
@@ -244,9 +247,9 @@ if target in content:
 
     # 2. Add admin.* server block for admin console on port 443
     if [ -n "$ADMIN_HOSTNAME" ]; then
-        local ADMIN_CONF="/opt/zimbra/conf/nginx/includes/nginx.conf.web.admin.cxs"
+        local ADMIN_CONF="/opt/zimbra/conf/nginx/includes/nginx.conf.web.admin.custom"
         cat > "$ADMIN_CONF" <<'ADMINEOF'
-# CXS: Admin console via admin.* subdomain on port 443
+# Admin console via admin.* subdomain on port 443
 server {
     listen 443 ssl http2;
     server_name ADMIN_HOST_PLACEHOLDER;

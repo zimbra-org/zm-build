@@ -1,5 +1,5 @@
 ##############################################################################
-# CXS Zimbra Lightweight - Docker Runtime Image
+# Zimbra FOSS - Docker Runtime Image
 #
 # Uses a pre-built .tgz installer (from build-and-deploy.sh --build-only)
 #
@@ -8,12 +8,10 @@
 #   docker build -t william1988/cxs-zimbra:1.0.0 .
 #
 # Run:
-#   docker run -d --name zimbra -h mail.cloudxspace.com \
-#     -e DOMAIN=cloudxspace.com -e ADMIN_PASS=changeme \
-#     -p 25:25 -p 80:80 -p 443:443 -p 465:465 -p 587:587 \
-#     -p 993:993 -p 995:995 -p 7071:7071 \
-#     -v zimbra-data:/opt/zimbra \
-#     william1988/cxs-zimbra:1.0.0
+#   docker compose up -d
+#
+# First start takes ~10 minutes (installs + configures Zimbra).
+# Subsequent starts take ~1 minute.
 ##############################################################################
 
 FROM ubuntu:20.04

@@ -1,5 +1,5 @@
 #!/bin/bash
-# CXS Zimbra Lightweight - Build, Deploy & Configure
+# Zimbra FOSS - Build, Deploy & Configure
 # Usage:
 #   ./build-and-deploy.sh                          # Build + deploy (interactive)
 #   ./build-and-deploy.sh --build-only             # Build only
