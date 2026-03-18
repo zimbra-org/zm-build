@@ -147,11 +147,49 @@ docker login
 docker push william1988/cxs-zimbra:1.0.0
 ```
 
+### Manual SSL Setup (Let's Encrypt)
+
+If the automatic Let's Encrypt setup didn't run (e.g., port 80 was blocked during first start), you can set it up manually:
+
+```bash
+# 1. Stop proxy to free port 80 for certbot
+docker exec cxs-zimbra su - zimbra -c "zmproxyctl stop"
+
+# 2. Get Let's Encrypt certificate
+docker exec cxs-zimbra certbot certonly --standalone \
+  -d mail.yourdomain.com \
+  --non-interactive --agree-tos -m admin@yourdomain.com
+
+# 3. Deploy certificate to Zimbra
+docker exec cxs-zimbra bash -c '
+DOMAIN=mail.yourdomain.com
+LE=/etc/letsencrypt/live/$DOMAIN
+mkdir -p /opt/zimbra/ssl/zimbra/commercial
+cp $LE/privkey.pem /opt/zimbra/ssl/zimbra/commercial/commercial.key
+chown zimbra:zimbra /opt/zimbra/ssl/zimbra/commercial/commercial.key
+chmod 640 /opt/zimbra/ssl/zimbra/commercial/commercial.key
+cp $LE/cert.pem /tmp/commercial.crt
+# Build full chain with ISRG Root X1 (required by Zimbra cert validation)
+wget -qO /tmp/isrg-root-x1.pem https://letsencrypt.org/certs/isrgrootx1.pem
+cat $LE/chain.pem /tmp/isrg-root-x1.pem > /tmp/full_chain.pem
+su - zimbra -c "zmcertmgr deploycrt comm /tmp/commercial.crt /tmp/full_chain.pem"
+'
+
+# 4. Restart all services to use the new certificate
+docker exec cxs-zimbra su - zimbra -c "zmcontrol restart"
+```
+
+**Important notes:**
+- DNS A record for `mail.yourdomain.com` must point to your server IP before running certbot
+- Port 80 must be reachable from the internet (check your hosting provider's firewall)
+- The ISRG Root X1 certificate **must** be appended to the chain, otherwise `zmcertmgr` will fail with `unable to get issuer certificate`
+- Certificate expires after 90 days. Renew with: `docker exec cxs-zimbra docker-entrypoint.sh setup-ssl`
+
 ### Troubleshooting (Docker)
 
 | Problem | Solution |
 |---------|----------|
-| SSL certificate warning in browser | Port 80 was blocked during first start, so Let's Encrypt failed. Run `docker exec cxs-zimbra docker-entrypoint.sh setup-ssl` |
+| SSL certificate warning in browser | Self-signed cert is in use. See [Manual SSL Setup](#manual-ssl-setup-lets-encrypt) above, or run `docker exec cxs-zimbra docker-entrypoint.sh setup-ssl` |
 | Port 443 not listening | Upstream services not registered. Reset: `docker compose down && rm -rf ./data/zimbra/* ./data/zimbra/.* && docker compose up -d` |
 | 502 Bad Gateway | Login upstream not set or mailbox still starting. Wait 2 minutes, then check `docker exec cxs-zimbra su - zimbra -c "zmcontrol status"` |
 | Container starts but services don't run | Data dir corrupted. Reset: `docker compose down && rm -rf ./data/zimbra/* ./data/zimbra/.* && docker compose up -d` |
