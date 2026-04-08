@@ -12,6 +12,64 @@ BRAND_MAIL_URL="${BRAND_MAIL_URL:-https://$ZIMBRA_HOST}"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-admin@$DOMAIN}"
 ZIMBRA_INSTALLED_MARKER="/opt/zimbra/.docker_installed"
 
+ensure_system_users() {
+    # When a container is recreated (e.g. port change in docker-compose),
+    # /opt/zimbra persists via volume but ALL system users/groups are lost
+    # (/etc/passwd, /etc/group, /etc/sudoers.d/ are in the container layer).
+    # This function recreates everything Zimbra needs to run.
+
+    if id zimbra &>/dev/null && getent group postfix &>/dev/null; then
+        return 0
+    fi
+
+    echo "Recreating system users/groups (lost on container recreate)..."
+
+    # Detect zimbra UID/GID from home directory files (not binaries — those are root-owned)
+    local ZIM_UID ZIM_GID
+    ZIM_UID=$(stat -c '%u' /opt/zimbra/.bashrc 2>/dev/null || echo 999)
+    ZIM_GID=$(stat -c '%g' /opt/zimbra/.bashrc 2>/dev/null || echo 999)
+
+    # Skip if UID is 0 (root) — means files haven't been chowned yet
+    [ "$ZIM_UID" = "0" ] && ZIM_UID=999
+    [ "$ZIM_GID" = "0" ] && ZIM_GID=999
+
+    # Zimbra user/group
+    groupadd -g "$ZIM_GID" zimbra 2>/dev/null || true
+    useradd -u "$ZIM_UID" -g "$ZIM_GID" -d /opt/zimbra -s /bin/bash -M zimbra 2>/dev/null || true
+    usermod -aG adm,tty zimbra 2>/dev/null || true
+
+    # Postfix user/group (required by MTA)
+    # Detect postfix UID/GID from its spool directory
+    local PF_UID PF_GID PD_GID
+    PF_UID=$(stat -c '%u' /opt/zimbra/data/postfix/spool 2>/dev/null || echo 1001)
+    PF_GID=$(stat -c '%g' /opt/zimbra/data/postfix/spool 2>/dev/null || echo 1001)
+    PD_GID=$(stat -c '%g' /opt/zimbra/data/postfix/spool/maildrop 2>/dev/null || echo 1002)
+    [ "$PF_UID" = "0" ] && PF_UID=1001
+    [ "$PF_GID" = "0" ] && PF_GID=1001
+    [ "$PD_GID" = "0" ] && PD_GID=1002
+
+    groupadd -g "$PF_GID" postfix 2>/dev/null || true
+    groupadd -g "$PD_GID" postdrop 2>/dev/null || true
+    useradd -u "$PF_UID" -g "$PF_GID" -s /usr/sbin/nologin -M -d /opt/zimbra/data/postfix postfix 2>/dev/null || true
+    usermod -aG postdrop zimbra 2>/dev/null || true
+
+    # Zimbra passwordless sudo (many services use sudo internally)
+    if [ ! -f /etc/sudoers.d/zimbra ]; then
+        echo "zimbra ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/zimbra
+        chmod 440 /etc/sudoers.d/zimbra
+    fi
+
+    if id zimbra &>/dev/null; then
+        echo "System users restored: zimbra(uid=$ZIM_UID) postfix(uid=$PF_UID) postdrop(gid=$PD_GID)"
+    else
+        echo "ERROR: Failed to recreate system users"
+        return 1
+    fi
+}
+
+# Backward compat alias
+ensure_zimbra_user() { ensure_system_users; }
+
 setup_hosts() {
     local IP
     IP=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -312,6 +370,11 @@ start_zimbra() {
     /usr/sbin/sshd 2>/dev/null || true
 
     setup_hosts
+
+    # Recreate zimbra user if missing (happens when container is recreated
+    # but /opt/zimbra volume persists)
+    ensure_zimbra_user
+
     verify_extensions
     install_crontab
 
@@ -355,6 +418,7 @@ start_zimbra() {
 
 stop_zimbra() {
     echo "Stopping Zimbra services..."
+    ensure_zimbra_user
     su - zimbra -c "zmcontrol stop" 2>/dev/null || true
 }
 

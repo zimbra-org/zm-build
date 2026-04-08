@@ -99,6 +99,72 @@ Key directories inside `./data/zimbra/`:
 - `log/` — Zimbra logs
 - `index/`, `redolog/`, `backup/` — Search indexes, redo logs, backups
 
+### Restart After Stopping (IMPORTANT)
+
+When you run `docker compose down` or change ports in `docker-compose.yml`, Docker
+**destroys and recreates** the container. The `/opt/zimbra` data survives (it's on a
+volume), but all system users (`zimbra`, `postfix`) and configs (`/etc/sudoers.d/`)
+are lost. You must recreate them before Zimbra can start.
+
+```bash
+# 1. Start the container
+docker compose up -d
+
+# 2. Recreate system users lost during container recreate
+docker exec cxs-zimbra bash -c '
+  # Detect zimbra UID/GID from existing files
+  ZIM_UID=$(stat -c "%u" /opt/zimbra/.bashrc)
+  ZIM_GID=$(stat -c "%g" /opt/zimbra/.bashrc)
+  PF_UID=$(stat -c "%u" /opt/zimbra/data/postfix/spool 2>/dev/null || echo 1001)
+  PF_GID=$(stat -c "%g" /opt/zimbra/data/postfix/spool 2>/dev/null || echo 1001)
+  PD_GID=$(stat -c "%g" /opt/zimbra/data/postfix/spool/maildrop 2>/dev/null || echo 1002)
+
+  # Create users and groups
+  groupadd -g $ZIM_GID zimbra 2>/dev/null
+  useradd -u $ZIM_UID -g $ZIM_GID -d /opt/zimbra -s /bin/bash -M zimbra 2>/dev/null
+  usermod -aG adm,tty zimbra 2>/dev/null
+  groupadd -g $PF_GID postfix 2>/dev/null
+  groupadd -g $PD_GID postdrop 2>/dev/null
+  useradd -u $PF_UID -g $PF_GID -s /usr/sbin/nologin -M postfix 2>/dev/null
+  usermod -aG postdrop zimbra 2>/dev/null
+
+  # Zimbra needs passwordless sudo
+  echo "zimbra ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/zimbra
+  chmod 440 /etc/sudoers.d/zimbra
+
+  # Start system services
+  rsyslogd 2>/dev/null
+  cron 2>/dev/null
+  /usr/sbin/sshd 2>/dev/null
+
+  echo "System users restored: zimbra(uid=$ZIM_UID) postfix(uid=$PF_UID)"
+'
+
+# 3. Start Zimbra services
+docker exec cxs-zimbra su - zimbra -c 'zmcontrol start'
+
+# 4. Wait ~1-2 minutes, then verify
+docker exec cxs-zimbra su - zimbra -c 'zmcontrol status'
+```
+
+**Why this happens**: Docker can only change ports by destroying and recreating the
+container. A new container has a fresh `/etc/passwd` — the `zimbra` and `postfix`
+users created during installation no longer exist. The data on the volume is fine,
+but the OS-level users need to be recreated to match the file ownership.
+
+**Permanent fix**: Rebuild the Docker image with the updated `docker-entrypoint.sh`
+which handles this automatically:
+
+```bash
+# Copy the updated entrypoint into the running container (temporary fix)
+docker cp docker-entrypoint.sh cxs-zimbra:/usr/local/bin/docker-entrypoint.sh
+
+# Or rebuild the image (permanent fix)
+cp ~/workspace/zimbra-org/BUILDS/*/zcs-*.tgz ./zcs-installer.tgz
+docker build -t william1988/cxs-zimbra:1.0.0 .
+docker push william1988/cxs-zimbra:1.0.0
+```
+
 ### Clean Redeploy (reset everything)
 
 ```bash
@@ -192,6 +258,7 @@ docker exec cxs-zimbra su - zimbra -c "zmcontrol restart"
 | SSL certificate warning in browser | Self-signed cert is in use. See [Manual SSL Setup](#manual-ssl-setup-lets-encrypt) above, or run `docker exec cxs-zimbra docker-entrypoint.sh setup-ssl` |
 | Port 443 not listening | Upstream services not registered. Reset: `docker compose down && rm -rf ./data/zimbra/* ./data/zimbra/.* && docker compose up -d` |
 | 502 Bad Gateway | Login upstream not set or mailbox still starting. Wait 2 minutes, then check `docker exec cxs-zimbra su - zimbra -c "zmcontrol status"` |
+| `su: user zimbra does not exist` after restart | Container was recreated (port change, `docker compose down/up`). See [Restart After Stopping](#restart-after-stopping-important) above |
 | Container starts but services don't run | Data dir corrupted. Reset: `docker compose down && rm -rf ./data/zimbra/* ./data/zimbra/.* && docker compose up -d` |
 | Change password link goes to port 8443 | `zimbraPublicService*` not set. Run: `docker exec cxs-zimbra su - zimbra -c "zmprov md yourdomain.com zimbraPublicServiceHostname mail.yourdomain.com zimbraPublicServicePort 443 zimbraPublicServiceProtocol https"` |
 | Slow first start | Normal — first run downloads packages, installs Zimbra, configures services, and gets SSL cert (~10 minutes) |
