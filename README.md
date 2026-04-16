@@ -99,67 +99,42 @@ Key directories inside `./data/zimbra/`:
 - `log/` — Zimbra logs
 - `index/`, `redolog/`, `backup/` — Search indexes, redo logs, backups
 
-### Restart After Stopping (IMPORTANT)
+### Restart / Stop / Start (IMPORTANT)
 
-When you run `docker compose down` or change ports in `docker-compose.yml`, Docker
-**destroys and recreates** the container. The `/opt/zimbra` data survives (it's on a
-volume), but all system users (`zimbra`, `postfix`) and configs (`/etc/sudoers.d/`)
-are lost. You must recreate them before Zimbra can start.
+**Always use `docker restart` — never run `zmcontrol restart` directly.** The
+entrypoint script handles permission repairs, system user recreation, crontab
+install, nginx symlinks, and admin UI status refresh that `zmcontrol restart` skips.
 
 ```bash
-# 1. Start the container
+# Normal restart (recommended for everything)
+docker restart cxs-zimbra
+
+# After docker compose down/up or port changes
 docker compose up -d
 
-# 2. Recreate system users lost during container recreate
-docker exec cxs-zimbra bash -c '
-  # Detect zimbra UID/GID from existing files
-  ZIM_UID=$(stat -c "%u" /opt/zimbra/.bashrc)
-  ZIM_GID=$(stat -c "%g" /opt/zimbra/.bashrc)
-  PF_UID=$(stat -c "%u" /opt/zimbra/data/postfix/spool 2>/dev/null || echo 1001)
-  PF_GID=$(stat -c "%g" /opt/zimbra/data/postfix/spool 2>/dev/null || echo 1001)
-  PD_GID=$(stat -c "%g" /opt/zimbra/data/postfix/spool/maildrop 2>/dev/null || echo 1002)
-
-  # Create users and groups
-  groupadd -g $ZIM_GID zimbra 2>/dev/null
-  useradd -u $ZIM_UID -g $ZIM_GID -d /opt/zimbra -s /bin/bash -M zimbra 2>/dev/null
-  usermod -aG adm,tty zimbra 2>/dev/null
-  groupadd -g $PF_GID postfix 2>/dev/null
-  groupadd -g $PD_GID postdrop 2>/dev/null
-  useradd -u $PF_UID -g $PF_GID -s /usr/sbin/nologin -M postfix 2>/dev/null
-  usermod -aG postdrop zimbra 2>/dev/null
-
-  # Zimbra needs passwordless sudo
-  echo "zimbra ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/zimbra
-  chmod 440 /etc/sudoers.d/zimbra
-
-  # Start system services
-  rsyslogd 2>/dev/null
-  cron 2>/dev/null
-  /usr/sbin/sshd 2>/dev/null
-
-  echo "System users restored: zimbra(uid=$ZIM_UID) postfix(uid=$PF_UID)"
-'
-
-# 3. Start Zimbra services
-docker exec cxs-zimbra su - zimbra -c 'zmcontrol start'
-
-# 4. Wait ~1-2 minutes, then verify
+# Verify everything came up
 docker exec cxs-zimbra su - zimbra -c 'zmcontrol status'
 ```
 
-**Why this happens**: Docker can only change ports by destroying and recreating the
-container. A new container has a fresh `/etc/passwd` — the `zimbra` and `postfix`
-users created during installation no longer exist. The data on the volume is fine,
-but the OS-level users need to be recreated to match the file ownership.
+**Why not `zmcontrol restart`?** It only restarts Zimbra processes. It does NOT:
+- Repair postfix file ownership (stale UIDs after container recreate → MTA fails)
+- Recreate system users lost when container is recreated
+- Start `cron`/`rsyslog`/`sshd` (admin UI status, logger, mail queue all need these)
+- Refresh admin console status (`zmstatuslog`)
 
-**Permanent fix**: Rebuild the Docker image with the updated `docker-entrypoint.sh`
-which handles this automatically:
+The entrypoint does all of this on `docker restart`. Use it.
+
+**If you're stuck with stale state on an old image**, copy the updated entrypoint
+into the container without rebuilding:
 
 ```bash
-# Copy the updated entrypoint into the running container (temporary fix)
 docker cp docker-entrypoint.sh cxs-zimbra:/usr/local/bin/docker-entrypoint.sh
+docker restart cxs-zimbra
+```
 
-# Or rebuild the image (permanent fix)
+For a permanent fix, rebuild the image:
+
+```bash
 cp ~/workspace/zimbra-org/BUILDS/*/zcs-*.tgz ./zcs-installer.tgz
 docker build -t william1988/cxs-zimbra:1.0.0 .
 docker push william1988/cxs-zimbra:1.0.0

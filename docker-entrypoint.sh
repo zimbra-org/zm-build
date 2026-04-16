@@ -18,7 +18,16 @@ ensure_system_users() {
     # (/etc/passwd, /etc/group, /etc/sudoers.d/ are in the container layer).
     # This function recreates everything Zimbra needs to run.
 
+    # Even if users exist, file ownership may be stale (e.g. files owned by
+    # an orphan UID from a previous install). Detect and repair if so.
     if id zimbra &>/dev/null && getent group postfix &>/dev/null; then
+        local CUR_ZIM_UID FILE_ZIM_UID
+        CUR_ZIM_UID=$(id -u zimbra)
+        FILE_ZIM_UID=$(stat -c '%u' /opt/zimbra/.bashrc 2>/dev/null || echo "$CUR_ZIM_UID")
+        if [ "$CUR_ZIM_UID" != "$FILE_ZIM_UID" ] && [ "$FILE_ZIM_UID" != "0" ]; then
+            echo "Stale file ownership detected (files=$FILE_ZIM_UID, user=$CUR_ZIM_UID), repairing..."
+            find /opt/zimbra -uid "$FILE_ZIM_UID" -exec chown -h zimbra {} + 2>/dev/null
+        fi
         return 0
     fi
 
@@ -217,6 +226,43 @@ install_crontab() {
     fi
 }
 
+fix_postfix_permissions() {
+    # When the container is recreated, postfix files on the persistent volume
+    # may have stale UIDs from the previous container. The new postfix user has
+    # a different UID, so it can't read its own files → MTA fails to start.
+    # This function repairs ownership on every start. Idempotent + safe.
+
+    [ -d /opt/zimbra/data/postfix ] || return 0
+    id postfix &>/dev/null || return 0
+
+    echo "Repairing postfix file ownership..."
+
+    # Postfix REQUIRES the spool root to be owned by root (security check in postfix-script).
+    # Subdirs are owned by postfix, except maildrop/public which are postdrop-writable.
+    chown root:root /opt/zimbra/data/postfix/spool 2>/dev/null
+    find /opt/zimbra/data/postfix/spool -mindepth 1 -maxdepth 1 -type d \
+        ! -name maildrop ! -name public \
+        -exec chown -R postfix:postfix {} + 2>/dev/null
+    chown -R postfix:postdrop /opt/zimbra/data/postfix/spool/maildrop 2>/dev/null
+    chown -R postfix:postdrop /opt/zimbra/data/postfix/spool/public 2>/dev/null
+    chmod 730 /opt/zimbra/data/postfix/spool/maildrop 2>/dev/null
+    chmod 710 /opt/zimbra/data/postfix/spool/public 2>/dev/null
+
+    # Postfix data dir (master.lock, prng_exch, postscreen_cache.lmdb)
+    chown -R postfix:postfix /opt/zimbra/data/postfix/data 2>/dev/null
+
+    # Postfix LDAP config files must be readable by postfix group
+    chgrp postfix /opt/zimbra/conf/ldap-*.cf 2>/dev/null
+
+    # postqueue/postdrop need setgid postdrop so users can submit mail
+    if [ -f /opt/zimbra/common/sbin/postqueue ]; then
+        chgrp postdrop /opt/zimbra/common/sbin/postqueue /opt/zimbra/common/sbin/postdrop 2>/dev/null
+        chmod g+s /opt/zimbra/common/sbin/postqueue /opt/zimbra/common/sbin/postdrop 2>/dev/null
+    fi
+
+    echo "Postfix ownership repaired"
+}
+
 setup_ssl() {
     echo "=== Setting up Let's Encrypt SSL certificate ==="
 
@@ -377,9 +423,16 @@ start_zimbra() {
 
     verify_extensions
     install_crontab
+    fix_postfix_permissions
 
     # Ensure nginx.conf symlink exists (may not persist across container restarts)
     ln -sf /opt/zimbra/conf/nginx.conf /opt/zimbra/common/conf/nginx.conf 2>/dev/null || true
+
+    # Logger service (zmlogswatchctl) is missing /opt/zimbra/libexec/zmlogswatch
+    # in some Zimbra 10.x builds. Disable it so it doesn't show as failed.
+    if [ ! -f /opt/zimbra/libexec/zmlogswatch ]; then
+        su - zimbra -c "zmprov ms $ZIMBRA_HOST -zimbraServiceEnabled logger" 2>/dev/null || true
+    fi
 
     su - zimbra -c "zmcontrol start"
 
